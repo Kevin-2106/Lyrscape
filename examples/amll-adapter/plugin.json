@@ -1,0 +1,48 @@
+{
+  "id": "official.adapter.amll",
+  "name": "AMLL Playback Adapter",
+  "version": "0.1.0",
+  "sdk": "^0.1.0",
+  "platforms": ["windows"],
+  "description": "Design example only; entrypoint and runtime are not implemented.",
+  "contributes": [
+    {
+      "id": "amll-playback",
+      "kind": "playback-adapter",
+      "runtime": "worker",
+      "entry": "dist/adapter.js",
+      "provides": ["lyrscape.playback-adapter@1"],
+      "optionalServices": ["lyrscape.lyrics.parser.ttml@1"]
+    }
+  ],
+  "permissions": {
+    "network.listen": {
+      "hosts": ["127.0.0.1", "::1"],
+      "ports": "configured-port"
+    },
+    "sessions.publish": "owned",
+    "storage": "plugin-private"
+  },
+  "configuration": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "host": {
+        "type": "string",
+        "enum": ["127.0.0.1", "::1"],
+        "default": "127.0.0.1"
+      },
+      "port": {
+        "type": "integer",
+        "minimum": 1024,
+        "maximum": 65535,
+        "default": 11444
+      },
+      "protocol": {
+        "type": "string",
+        "enum": ["auto-on-connect", "v1", "v2"],
+        "default": "auto-on-connect"
+      }
+    }
+  }
+}
