@@ -1,0 +1,61 @@
+import { chromium, expect } from '@playwright/test';
+import { mkdir } from 'node:fs/promises';
+import path from 'node:path';
+
+const output = process.env.LYRSCAPE_QA_DIR ?? path.resolve('qa');
+await mkdir(output, { recursive: true });
+const browser = await chromium.connectOverCDP(process.env.LYRSCAPE_CDP ?? 'http://127.0.0.1:9227');
+const pages = browser.contexts().flatMap(c => c.pages());
+const main = pages.find(p => !p.url().includes('surface=overlay'));
+const overlay = pages.find(p => p.url().includes('surface=overlay'));
+if (!main || !overlay) throw Error(`Expected both native windows: ${pages.map(p => p.url())}`);
+const native = (page, command, args) => page.evaluate(([command, args]) => window.__TAURI_INTERNALS__.invoke(command, args), [command, args]);
+const text = () => main.locator('.word-base').allTextContents().then(a => a.join(''));
+let ws;
+const cleanup = async () => { try { ws?.close(); } catch {} await native(main, 'amll_stop'); await native(main, 'overlay_update', { visible: false, clickThrough: false, alwaysOnTop: true }); };
+try {
+  await main.reload();
+  await expect(main.locator('#lyrics-preview')).toBeVisible();
+  await main.locator('[data-overlay-toggle]').click();
+  const visible = await native(main, 'overlay_status');
+  if (!visible.visible || !visible.alwaysOnTop) throw Error(`Native overlay state: ${JSON.stringify(visible)}`);
+  await expect(overlay.locator('.word-base').first()).toHaveText('让');
+  await expect(overlay.locator('html')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+  await main.locator('[data-overlay="clickthrough"]').check();
+  const through = await native(main, 'overlay_status');
+  if (!through.clickThrough) throw Error('Native click-through did not enable');
+  await main.locator('[data-overlay="clickthrough"]').uncheck();
+  await main.locator('[data-adapter="amll"]').click();
+  await main.locator('[data-port]').fill('11445');
+  await main.locator('[data-connect]').click();
+  await expect(main.locator('[data-connection-status]')).toHaveText('等待连接');
+  ws = new WebSocket('ws://127.0.0.1:11445');
+  await new Promise((resolve, reject) => { ws.addEventListener('open', resolve, { once: true }); ws.addEventListener('error', reject, { once: true }); });
+  ws.send(JSON.stringify({ type: 'initialize' }));
+  const send = value => ws.send(JSON.stringify({ type: 'state', value }));
+  send({ update: 'setMusic', musicId: 'qa', musicName: 'AMLL native smoke', albumId: '', albumName: '', artists: [{ id: 'qa', name: 'Fixture' }], duration: 60000 });
+  send({ update: 'setLyric', format: 'structured', lines: [{ startTime: 0, endTime: 30000, words: [{ word: '原生 ', startTime: 0, endTime: 3000 }, { word: 'AMLL 连接', startTime: 3000, endTime: 8000 }], translatedLyric: 'Native receiver fixture' }] });
+  send({ update: 'progress', progress: 1500 });
+  send({ update: 'resumed' });
+  await expect(main.locator('[data-track-title]')).toHaveText('AMLL native smoke');
+  await expect.poll(text).toBe('原生 AMLL 连接');
+  await expect.poll(() => overlay.locator('.word-base').allTextContents().then(a => a.join(''))).toBe('原生 AMLL 连接');
+  await main.locator('[data-adapter="demo"]').click();
+  send({ update: 'paused' }); send({ update: 'progress', progress: 4000 });
+  await main.locator('[data-adapter="amll"]').click();
+  await expect(main.locator('[data-track-title]')).toHaveText('AMLL native smoke');
+  await expect.poll(text).toBe('原生 AMLL 连接');
+  await main.screenshot({ path: path.join(output, 'lyrscape-native-settings.png'), fullPage: true });
+  await overlay.screenshot({ path: path.join(output, 'lyrscape-native-overlay.png'), omitBackground: true });
+  ws.close();
+  await expect(main.locator('[data-track-title]')).toHaveText('等待播放器');
+
+  // V1 first binary payload negotiates version, progress uses u16 magic 5 + u64 ms.
+  ws = new WebSocket('ws://127.0.0.1:11445');
+  await new Promise((resolve, reject) => { ws.addEventListener('open', resolve, { once: true }); ws.addEventListener('error', reject, { once: true }); });
+  const v1Progress = Buffer.alloc(10); v1Progress.writeUInt16LE(5); v1Progress.writeBigUInt64LE(1234n, 2); ws.send(v1Progress);
+  const v1Lyric = Buffer.concat([Buffer.from([11, 0]), Buffer.from('<tt><body><div><p begin="0s" end="10s">V1 歌词</p></div></body></tt>\0')]);
+  ws.send(v1Lyric);
+  await expect(main.locator('.lyric-current')).toHaveText('V1 歌词');
+  console.log('PASS: native WebView UI + transparent overlay, native show/top/clickthrough toggles, AMLL V2 socket→adapter→renderer→overlay, adapter cache preservation, disconnect reset, V1 binary progress/TTML.');
+} finally { await cleanup(); await browser.close(); }

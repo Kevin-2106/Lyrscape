@@ -1,0 +1,12 @@
+.lyric-surface { width: 100%; box-sizing: border-box; padding: 26px 32px; border-radius: 16px; overflow-wrap: anywhere; white-space: pre-wrap; }
+.lyric-current { color: var(--lyric-color); filter: drop-shadow(0 1px var(--lyric-shadow) rgba(0,0,0,.8)); }
+.gradient-text .lyric-current { background: var(--lyric-paint); background-clip: text; -webkit-background-clip: text; color: transparent; }
+.lyric-word { position: relative; display: inline-block; white-space: pre; }
+.word-base { color: var(--lyric-inactive); }
+.word-fill { position: absolute; inset: 0; color: var(--lyric-color); pointer-events: none; }
+.gradient-text .word-fill { background: var(--lyric-paint); background-clip: text; -webkit-background-clip: text; color: transparent; }
+.lyric-translation { color: var(--lyric-inactive); font-size: .45em; margin-top: 12px; font-weight: 400; }
+.lyric-next { color: var(--lyric-inactive); font-size: .55em; margin-top: 18px; font-weight: 400; opacity: .75; }
+body.overlay-page { background: transparent !important; margin: 0; overflow: hidden; }
+.overlay-page #app { min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+.overlay-page .lyric-surface { cursor: move; }
