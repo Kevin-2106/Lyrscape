@@ -25,10 +25,12 @@ npm run desktop:dev
 
 - 普通文字歌词；LRC、增强 LRC、常用歌词 TTML、纯文本导入，逐字数据按真实提供的时间显示。
 - CSS 颜色值、未激活文字颜色、双色线性渐变与角度。
-- 本机字体/自定义 font-family、字号、字重、行高、对齐、阴影、背景透明度、译文和下一行开关。
+- 按歌词语言自动选择的打包字体（简体 / 繁体 / 日文不混排，见 [字体](docs/fonts.md)）、本机字体/自定义 font-family、字号、字重、行高、对齐、阴影、背景透明度、译文和下一行开关。
 - 样式自动保存，设置与 overlay 共用时间基准和状态。
 - 透明置顶窗口、鼠标穿透/编辑模式、拖动，按内容调整高度。
 - 本机 AMLL WebSocket 接收服务，默认 `ws://localhost:11444`。在播放来源中选择 AMLL 并启动服务，然后在播放器 Connector 中填入地址。
+- 插件管理与配置：分类 / 搜索、状态 / 依赖、可选插件启停、配置保存；普通文字默认，另有 Aurora 动画 renderer（彗星、旋转、棱镜进入）。
+- 三种 PV renderer（canvas）：糖果波普、情书、水底挽歌，按 DECO*27 PV 的字体、配色与特效重做；副歌大字 / 主歌字幕自动构图，跟随歌词时间，可独立配置。
 
 当前只读接收播放信息，不向外部播放器发送播放/seek 控制。更多实现边界与验证证据见 [第一版说明](docs/baseline.md)。
 
@@ -48,8 +50,20 @@ AMLL adapter 与 AMLL 渲染器是两个独立插件；接入 AMLL 协议不要�
 
 - [插件架构](docs/architecture.md)
 - [AMLL adapter 调研与设计](docs/amll-adapter.md)
+- [PCM 音频与全局快捷键](docs/audio-and-shortcuts.md)
+- [节拍检测（PCM → 渲染器）](docs/beat-detection.md)
+- [字体与歌词语言（简体 / 繁体 / 日文自动选择）](docs/fonts.md)
+- [手动插件热重载](docs/manual-plugin-reload.md)
 - [实施路线和验收标准](docs/roadmap.md)
 - [第一版说明与验证](docs/baseline.md)
+- [插件管理与动画 renderer](docs/plugins.md)
+- [文字 PV 风格、时间规则与开发](docs/pv-renderers.md)
+- [开发与贡献入口](CONTRIBUTING.md)
+- [本地开发与验证](docs/development.md)
+- [内存排查、优化与原生对比](docs/memory-optimization.md)
+- [插件开发与可编译示例](docs/plugin-development.md)
+- [交接清单](docs/handoff.md)
+- [Overlay 修复与本轮验证](docs/overlay-validation.md)
 - [AMLL adapter manifest 示例](examples/amll-adapter/plugin.json)
 
 技术方向：Windows 优先；Tauri 2 + WebView2 + TypeScript。SDK 与插件契约不绑定 React/Vue，原生平台能力由 Rust 宿主代理。

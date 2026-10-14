@@ -7,7 +7,8 @@
     "strict": true,
     "noEmit": true,
     "skipLibCheck": true,
-    "allowImportingTsExtensions": true
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true
   },
-  "include": ["src", "tests", "vite.config.ts"]
+  "include": ["src", "tests", "examples/renderer-starter", "vite.config.ts"]
 }

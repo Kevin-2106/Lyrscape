@@ -11,7 +11,7 @@ use std::{
     },
     time::{Duration, Instant},
 };
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 use tokio::{
     net::{TcpListener, TcpStream},
     sync::{watch, Mutex as AsyncMutex},
@@ -280,6 +280,9 @@ struct ConnectionGuard {
 
 impl Drop for ConnectionGuard {
     fn drop(&mut self) {
+        self.app
+            .state::<crate::audio::AudioHub>()
+            .discontinuity(&self.id, true);
         self.connections
             .lock()
             .unwrap_or_else(|e| e.into_inner())
@@ -443,6 +446,13 @@ async fn client(
         };
         match decoded {
             Ok(Decoded::Payload(payload)) => {
+                if matches!(
+                    payload.pointer("/value/update").and_then(Value::as_str),
+                    Some("setMusic" | "paused")
+                ) {
+                    app.state::<crate::audio::AudioHub>()
+                        .discontinuity(&id, false);
+                }
                 let _ = app.emit(
                     "amll-message",
                     MessageEvent {
@@ -451,6 +461,15 @@ async fn client(
                     },
                 );
             }
+            Ok(Decoded::Pcm(data)) => app.state::<crate::audio::AudioHub>().push(
+                &id,
+                data,
+                if matches!(version, Some(Version::V1)) {
+                    1
+                } else {
+                    2
+                },
+            ),
             Ok(Decoded::Ping) => {
                 let pong = match version {
                     Some(Version::V1) => Message::Binary(vec![1, 0].into()),

@@ -1,4 +1,5 @@
 import { chromium, expect } from '@playwright/test';
+import { go } from './lib/nav.mjs';
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 
@@ -15,7 +16,9 @@ let ws;
 const cleanup = async () => { try { ws?.close(); } catch {} await native(main, 'amll_stop'); await native(main, 'overlay_update', { visible: false, clickThrough: false, alwaysOnTop: true }); };
 try {
   await main.reload();
+  await go(main, 'lyrics');
   await expect(main.locator('#lyrics-preview')).toBeVisible();
+  await go(main, 'overlay');
   await main.locator('[data-overlay-toggle]').click();
   const visible = await native(main, 'overlay_status');
   if (!visible.visible || !visible.alwaysOnTop) throw Error(`Native overlay state: ${JSON.stringify(visible)}`);
@@ -25,6 +28,7 @@ try {
   const through = await native(main, 'overlay_status');
   if (!through.clickThrough) throw Error('Native click-through did not enable');
   await main.locator('[data-overlay="clickthrough"]').uncheck();
+  await go(main, 'lyrics');
   await main.locator('[data-adapter="amll"]').click();
   await main.locator('[data-port]').fill('11445');
   await main.locator('[data-connect]').click();

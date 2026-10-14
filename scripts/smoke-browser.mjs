@@ -1,6 +1,7 @@
 import { chromium, expect } from '@playwright/test';
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
+import { go } from './lib/nav.mjs';
 
 const output = process.env.LYRSCAPE_QA_DIR ?? path.resolve('qa');
 await mkdir(output, { recursive: true });
@@ -18,10 +19,11 @@ try {
   await page.locator('[data-lyrics]').fill('普通文字，自己的风景。');
   await page.locator('[data-import]').click();
   await expect(page.locator('.lyric-current')).toHaveText('普通文字，自己的风景。');
+  await go(page, 'style');
   await input('[data-setting="fontSize"]', 52);
   await page.locator('[data-setting="color"][type="text"]').fill('rebeccapurple');
   await expect(page.locator('.lyric-current')).toHaveCSS('color', 'rgb(102, 51, 153)');
-  await expect(page.locator('#lyrics-preview')).toHaveCSS('font-size', '52px');
+  await expect(page.locator('#style-preview')).toHaveCSS('font-size', '52px');
   await page.locator('[data-font-select]').selectOption('custom');
   await page.locator('[data-setting="fontFamily"]').fill('"Microsoft YaHei", sans-serif');
   await page.locator('[data-setting="gradientEnabled"]').check();
@@ -31,9 +33,10 @@ try {
   if (!paint.includes('135deg')) throw Error(`Gradient did not render: ${paint}`);
   await page.reload();
   await expect(page.locator('[data-setting="gradientEnabled"]')).toBeChecked();
-  await expect(page.locator('#lyrics-preview')).toHaveCSS('font-size', '52px');
+  await expect(page.locator('#style-preview')).toHaveCSS('font-size', '52px');
   await page.screenshot({ path: path.join(output, 'lyrscape-settings.png'), fullPage: true });
 
+  await go(page, 'lyrics');
   await page.locator('details.import-card').evaluate(element => { element.open = true; });
   await page.locator('[data-lyrics]').fill('[00:00.00]First line\n[00:04.00]Next line');
   await page.locator('[data-import]').click();
@@ -43,8 +46,7 @@ try {
   await page.locator('[data-import]').click();
   await input('[data-seek]', 500);
   await expect(page.locator('.word-fill')).toHaveCount(2);
-  const clip = await page.locator('.word-fill').first().evaluate(element => element.style.clipPath);
-  if (!clip.includes('50%')) throw Error(`Word progress did not render: ${clip}`);
+  await expect.poll(() => page.locator('.word-fill').first().evaluate(element => element.style.clipPath), { message: 'Word progress did not render' }).toContain('50%');
 
   const overlay = await context.newPage();
   await overlay.goto('http://127.0.0.1:1420/?surface=overlay');

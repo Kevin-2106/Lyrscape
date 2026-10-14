@@ -2,6 +2,10 @@
 
 状态：目标路线。2026-10-13 的基础文字与只读 AMLL 接入版本已实现，详见 [第一版说明](baseline.md)。M0 的完整 manifest/权限隔离与 M3 的第三方包生态仍未完成。原计划日期：2026-10-12。
 
+2026-10-13 补充：内置插件管理 / 配置 UI、分类、可选启停与 Aurora 独立动画 renderer 已实现；普通文字仍为默认。已实现 renderer 选择与 scope 释放，但这不代表 M3 的第三方包、隔离和通用 effect 插槽完成，详见 [插件说明](plugins.md)。
+
+同日新增三个独立 PV renderer（糖果波普 / 情书 / 水底挽歌，canvas 实现），还原参考 PV 的字体、配色与特效，独立配置并共享时间采样。仍属于可信内置源码组合，不代表完整 PV 场景编辑器或第三方包生态，见 [实现说明](pv-renderers.md)。
+
 ## M0：宿主与 SDK
 
 实现 manifest/schema、service registry、插件 scope、依赖解析、版本匹配、权限代理和恢复入口。提供 mock playback adapter，正式定义会话/曲目/歌词/时间契约。

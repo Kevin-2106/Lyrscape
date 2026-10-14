@@ -1,10 +1,13 @@
 import type { Settings } from '../sdk/types';
 import type { Plugin } from '../kernel/host';
 
+/** The pre-auto default; stored settings still holding it follow the lyric language now. */
+const LEGACY_DEFAULT_FONT = '"Microsoft YaHei", "Segoe UI", sans-serif';
+
 export const defaults: Settings = {
   color: '#f4f2ff', inactiveColor: '#777582', gradientEnabled: false,
   gradientStart: '#b7a0ff', gradientEnd: '#8cdce4', gradientAngle: 90,
-  fontFamily: '"Microsoft YaHei", "Segoe UI", sans-serif', fontSize: 44, fontWeight: 600,
+  fontFamily: 'auto:sans', fontSize: 44, fontWeight: 600,
   textAlign: 'center', lineHeight: 1.45, shadow: 0.5, backgroundOpacity: 0,
   showTranslation: true, showNextLine: true,
 };
@@ -24,7 +27,7 @@ export function normalizeSettings(input: unknown): Settings {
     gradientEnabled: typeof s.gradientEnabled === 'boolean' ? s.gradientEnabled : defaults.gradientEnabled,
     gradientAngle: number(s.gradientAngle, defaults.gradientAngle, 0, 360),
     fontFamily: typeof s.fontFamily === 'string' && s.fontFamily.trim().length > 0 && s.fontFamily.length <= 300
-      ? s.fontFamily.trim() : defaults.fontFamily,
+      && s.fontFamily.trim() !== LEGACY_DEFAULT_FONT ? s.fontFamily.trim() : defaults.fontFamily,
     fontSize: number(s.fontSize, defaults.fontSize, 18, 100),
     fontWeight: number(s.fontWeight, defaults.fontWeight, 100, 900),
     textAlign: ['left', 'center', 'right'].includes(s.textAlign ?? '') ? s.textAlign! : defaults.textAlign,

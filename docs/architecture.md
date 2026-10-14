@@ -58,6 +58,8 @@ AMLL、SMTC 等 adapter 对外发布统一的会话事件。宿主没有 AMLL �
 
 一个插件包可以贡献多种能力，但每种贡献有独立 ID 和运行入口。插件可自由选择 Web 前端框架。
 
+当前可信注册表已标注主要能力分类，并实现管理 UI、可选插件启停、声明式配置及 renderer 选择；见 [实现说明](plugins.md)。分类是贡献元数据，不要求用不同基类继承。当前 Aurora 把动画作为 renderer 内部能力，通用 effect 插槽与多个贡献点的完整 manifest 仍未实现。
+
 Theme/effect 不假设所有 renderer 都有 DOM。Renderer 声明 `dom-css`、`canvas-overlay`、`shader-pass` 等扩展槽和参数 schema，插件按兼容性挂接；不兼容的效果不能靠修改其他插件私有 DOM 强行运行。允许一个完整 scene 插件组合 renderer、背景和效果，也允许完全替换 renderer。
 
 ## 4. 统一数据契约

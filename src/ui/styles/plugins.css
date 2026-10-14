@@ -1,0 +1,30 @@
+.plugin-panel { display: block; }
+.plugin-toolbar { display: flex; gap: 10px; align-items: center; margin-bottom: 16px; position: sticky; top: 0; z-index: 2; padding: 4px 0 10px; background: var(--bg); }
+.plugin-toolbar input { flex: 1; min-width: 0; padding: 9px 12px; font-size: 12px; }
+.plugin-toolbar select { max-width: 150px; padding: 8px; font-size: 12px; }
+.plugin-count { font-size: 11px; color: var(--accent); white-space: nowrap; margin-left: 4px; }
+.plugin-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr)); align-items: start; gap: 12px; }
+.plugin-card { min-width: 0; border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; background: var(--panel); }
+.plugin-card.is-current { border-color: #939fcf; background: linear-gradient(140deg, #262b43, #171923); }
+.plugin-card-top, .plugin-card-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.plugin-category, .plugin-version { color: #8f97af; font-size: 11px; }
+.plugin-origin { margin-right: auto; padding: 1px 6px; border-radius: 999px; background: rgba(214, 245, 58, 0.14); color: #c9e64a; font-size: 11px; }
+.plugin-origin[hidden] { display: none; }
+.plugin-status { color: #c6ceee; font-size: 11px; }
+.plugin-card-title { margin-top: 12px; }
+.plugin-card h3 { font-size: 14px; font-weight: 560; }
+.plugin-description { color: #929aaf; font-size: 12px; line-height: 1.8; margin: 8px 0; }
+.plugin-id { font-size: 10px; color: #727c96; overflow-wrap: anywhere; user-select: text; }
+.plugin-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 14px; }
+.plugin-actions button { font-size: 11px; padding: 7px 11px; }
+.plugin-details { border-top: 1px solid #303443; margin-top: 14px; padding-top: 12px; }
+.plugin-details summary { font-size: 11px; color: #a5afce; }
+.plugin-fields { margin: 12px 0; }
+.plugin-field { margin: 14px 0; }
+.plugin-field input[type="number"] { padding: 9px; width: 100%; font-size: 12px; }
+.plugin-field input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent); }
+.plugin-dependencies, .plugin-services { overflow-wrap: anywhere; }
+.plugin-message { font-size: 12px; color: #efaaaa; margin-top: 12px; }
+.plugin-boundary { border-top: 1px solid var(--line); padding-top: 14px; margin-top: 18px; }
+.plugin-empty { padding: 16px 0; }
+.plugin-actions [data-plugin-reload-source] { min-width: 0; max-width: 150px; padding: 7px 9px; font-size: 12px; }

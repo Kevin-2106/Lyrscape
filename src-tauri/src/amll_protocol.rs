@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 pub const MAX_MESSAGE_BYTES: usize = 2 * 1024 * 1024;
+pub const MAX_PCM_BYTES: usize = 64 * 1024;
 const MAX_TEXT_BYTES: usize = 1024 * 1024;
 const MAX_LINES: usize = 4096;
 const MAX_WORDS: usize = 32768;
@@ -19,6 +20,18 @@ pub enum Decoded {
     Pong,
     Initialize,
     Ignored,
+    Pcm(Vec<u8>),
+}
+
+fn pcm(data: Vec<u8>) -> Result<Decoded, String> {
+    if data.len() > MAX_PCM_BYTES || data.len() % 4 != 0 {
+        return Err("PCM must contain complete stereo i16 frames and be at most 64 KiB".into());
+    }
+    if data.is_empty() {
+        Ok(Decoded::Ignored)
+    } else {
+        Ok(Decoded::Pcm(data))
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -207,12 +220,31 @@ pub fn decode_v2(text: &str) -> Result<Decoded, String> {
         Some("pong") => Ok(Decoded::Pong),
         Some("state") => {
             let state = value.get("value").ok_or("AMLL state requires a value")?;
-            // Baseline renderer does not consume covers or PCM. Never forward raw bytes into webviews.
+            // PCM has its own bounded channel; it never enters song state snapshots.
             if matches!(
                 state.get("update").and_then(Value::as_str),
-                Some("setCover" | "audioData")
+                Some("setCover")
             ) {
                 return Ok(Decoded::Ignored);
+            }
+            if state.get("update").and_then(Value::as_str) == Some("audioData") {
+                let values = state
+                    .get("data")
+                    .and_then(Value::as_array)
+                    .ok_or("PCM data must be a byte array")?;
+                if values.len() > MAX_PCM_BYTES {
+                    return Err("PCM exceeds 64 KiB".into());
+                }
+                let bytes = values
+                    .iter()
+                    .map(|v| {
+                        v.as_u64()
+                            .filter(|n| *n <= 255)
+                            .map(|n| n as u8)
+                            .ok_or("Invalid PCM byte")
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                return pcm(bytes);
             }
             let state: StateUpdate = serde_json::from_value(state.clone())
                 .map_err(|_| "Invalid or unsupported AMLL state update".to_owned())?;
@@ -326,9 +358,13 @@ pub fn decode_v1(data: &[u8]) -> Result<Decoded, String> {
             reader.string(MAX_TEXT_BYTES)?;
             Decoded::Ignored
         }
-        4 | 9 => {
+        4 => {
             reader.skip_blob()?;
             Decoded::Ignored
+        }
+        9 => {
+            let size = reader.count(MAX_PCM_BYTES)?;
+            pcm(reader.take(size)?.to_vec())?
         }
         5 => StateUpdate::Progress {
             progress: reader.u64()?,
@@ -401,12 +437,19 @@ pub fn decode_v1(data: &[u8]) -> Result<Decoded, String> {
 pub fn validate_v2_binary(data: &[u8]) -> Result<Decoded, String> {
     // Version is locked on the first data frame; overlapping V1 magic values are never guessed.
     let mut reader = Reader { data, offset: 0 };
-    match reader.u16()? {
-        0 | 1 => reader.skip_blob()?,
+    let output = match reader.u16()? {
+        0 => {
+            let size = reader.count(MAX_PCM_BYTES)?;
+            pcm(reader.take(size)?.to_vec())?
+        }
+        1 => {
+            reader.skip_blob()?;
+            Decoded::Ignored
+        }
         _ => return Err("Unknown AMLL V2 binary channel".into()),
-    }
+    };
     reader.finish()?;
-    Ok(Decoded::Ignored)
+    Ok(output)
 }
 
 #[cfg(test)]
@@ -488,7 +531,7 @@ mod tests {
     }
 
     #[test]
-    fn protocol_version_is_explicit_and_binary_ignored_safely() {
+    fn protocol_version_is_explicit_and_covers_stay_out_of_song_state() {
         assert!(matches!(
             decode_v2(r#"{"type":"initialize"}"#).unwrap(),
             Decoded::Initialize
@@ -496,8 +539,46 @@ mod tests {
         assert!(matches!(decode_v1(&[0, 0]).unwrap(), Decoded::Ping));
         assert!(validate_v2_binary(&[0, 0]).is_err());
         assert!(matches!(
-            validate_v2_binary(&[0, 0, 1, 0, 0, 0, 42]).unwrap(),
+            validate_v2_binary(&[1, 0, 1, 0, 0, 0, 42]).unwrap(),
             Decoded::Ignored
+        ));
+    }
+
+    #[test]
+    fn pcm_preserves_bytes_for_v1_v2_binary_and_json() {
+        let bytes = vec![0, 128, 255, 127, 1, 0, 255, 255];
+        for magic in [9u16, 0] {
+            let mut wire = magic.to_le_bytes().to_vec();
+            wire.extend((bytes.len() as u32).to_le_bytes());
+            wire.extend(&bytes);
+            let decoded = if magic == 9 {
+                decode_v1(&wire)
+            } else {
+                validate_v2_binary(&wire)
+            }
+            .unwrap();
+            assert!(matches!(decoded, Decoded::Pcm(data) if data == bytes));
+        }
+        let json = json!({"type":"state","value":{"update":"audioData","data":bytes}}).to_string();
+        assert!(matches!(decode_v2(&json).unwrap(), Decoded::Pcm(data) if data == bytes));
+    }
+
+    #[test]
+    fn pcm_rejects_partial_frames_non_bytes_and_excessive_blocks() {
+        assert!(validate_v2_binary(&[0, 0, 1, 0, 0, 0, 42]).is_err());
+        assert!(
+            decode_v2(r#"{"type":"state","value":{"update":"audioData","data":[256,0,0,0]}}"#)
+                .is_err()
+        );
+        assert!(
+            decode_v2(r#"{"type":"state","value":{"update":"audioData","data":[1.5,0,0,0]}}"#)
+                .is_err()
+        );
+        assert!(pcm(vec![0; MAX_PCM_BYTES + 4]).is_err());
+        assert!(matches!(pcm(Vec::new()).unwrap(), Decoded::Ignored));
+        assert!(matches!(
+            pcm(vec![0; MAX_PCM_BYTES]).unwrap(),
+            Decoded::Pcm(_)
         ));
     }
 }

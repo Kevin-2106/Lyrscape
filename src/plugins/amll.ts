@@ -1,5 +1,5 @@
 import type { Plugin } from '../kernel/host';
-import type { AppState, PlaybackSnapshot } from '../sdk/types';
+import type { AppState, PlaybackSnapshot, PcmAudio } from '../sdk/types';
 import type { Store } from '../kernel/store';
 import type { Timeline } from '../sdk/types';
 import { parseAmllStructured, parseLyrics } from './parsers';
@@ -11,7 +11,7 @@ type WireMessage = { connectionId: string; payload: { type: string; value?: Reco
 
 export function amllPlugin(store: Store<AppState>): Plugin {
   return {
-    id: 'official.adapter.amll', requires: ['timeline@1'],
+    id: 'official.adapter.amll', requires: ['timeline@1', 'audio.pcm@1'],
     async activate(ctx) {
       let selected: string | undefined;
       const clients = new Set<string>();
@@ -22,8 +22,20 @@ export function amllPlugin(store: Store<AppState>): Plugin {
       });
       let session = blank();
       const time = ctx.service<Timeline>('timeline@1');
+      const audio = ctx.service<PcmAudio>('audio.pcm@1');
+      await audio.selectSource();
+      let audioSource: string | undefined;
+      let audioQueue = Promise.resolve();
+      const selectAudio = () => {
+        const next = active && store.get().adapterId === 'amll' ? selected : undefined;
+        if (audioSource === next) return;
+        audioSource = next;
+        audioQueue = audioQueue.then(() => audio.selectSource(next)).catch(error => console.error(error));
+      };
       let active = true;
       ctx.own(() => { active = false; });
+      ctx.own(store.subscribe(selectAudio));
+      ctx.own(() => { active = false; selectAudio(); return audioQueue; });
       const error = (message: string) => store.update(s => ({ ...s, error: message }));
       const applySession = () => store.update(s => s.adapterId === 'amll' ? { ...s, ...session } : s);
       const resetSession = () => { session = blank(); snapshots.clear(); applySession(); };
@@ -46,6 +58,7 @@ export function amllPlugin(store: Store<AppState>): Plugin {
             selected = clients.values().next().value;
             session = selected ? snapshots.get(selected) ?? blank() : blank(); applySession();
           }
+          selectAudio();
           store.update(s => ({ ...s, connection: { ...s.connection, clients: clients.size, status: clients.size ? 'connected' : s.connection.status === 'stopped' ? 'stopped' : 'listening' } }));
         }));
         ctx.own(await onEvent<WireMessage>('amll-message', e => {
@@ -89,12 +102,12 @@ export function amllPlugin(store: Store<AppState>): Plugin {
           store.update(s => ({ ...s, error: undefined, connection: { status: 'listening', port, clients: 0 } }));
         },
         async stop() {
-          await native('amll_stop'); selected = undefined; clients.clear(); resetSession();
+          if (desktop) await native('amll_stop'); selected = undefined; clients.clear(); resetSession();
           store.update(s => ({ ...s, connection: { ...s.connection, status: 'stopped', clients: 0 } }));
         },
       };
       ctx.provide('adapter.amll@1', adapter);
-      ctx.own(() => { if (desktop) void native('amll_stop').catch(console.error); });
+      ctx.own(async () => { if (desktop && store.get().connection.status !== 'stopped') await native('amll_stop'); });
     },
   };
 }

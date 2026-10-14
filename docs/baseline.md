@@ -8,7 +8,9 @@
 
 产品功能已有实际插件入口；完整的 manifest schema、版本协商、第三方包安装、Worker/iframe 隔离、在线插件目录和原生 sidecar 均未实现。当前运行边界是内置或开发者显式注册的可信代码，不能把这版作为不可信 JavaScript 插件的沙箱。
 
-扩展方式：实现 `Plugin` 并在入口注册，用 `ctx.provide()` 提供服务，`requires` 声明依赖，`ctx.own()` 追踪资源。替换 renderer 时提供相同的 `renderer@1` 服务，并移除默认 renderer provider。不能同时注册两个相同服务。
+扩展方式：实现 `Plugin` 并在入口注册，用 `ctx.provide()` 提供服务，`requires` 声明依赖，`ctx.own()` 追踪资源。当前普通文字和 Aurora 分别提供 `renderer.text@1` / `renderer.aurora@1`，渲染器选择插件提供 `renderer@1`。不能同时注册两个相同服务。管理 UI 可分类 / 搜索、查看依赖、启停 AMLL / Aurora 并保存独立配置；基础组合保持可用。详细接口和边界见 [插件管理](plugins.md)。
+
+同日新增三个独立 PV renderer（糖果波普 / 情书 / 水底挽歌，随后按参考 PV 重做为 canvas 实现），分别提供自己的 `renderer.pv-*@1` 服务，沿用选择服务与 overlay。自带字体与配色，副歌 / 主歌自动构图，独立配置；仍为可信源码组合，时间边界和最新交付证据见 [PV 说明](pv-renderers.md)。
 
 Kernel、SDK 和插件代码分布：`src/kernel/`、`src/sdk/`、`src/plugins/`。Rust platform broker 位于 `src-tauri/src/`，只接收来自对应控制窗口的命令；overlay 只有自身拖动、内容高度调整及消息权限。
 
@@ -43,6 +45,6 @@ node scripts/smoke-browser.mjs
 
 `scripts/smoke-desktop.mjs` 通过本机 WebView2 CDP 验证原生控制窗口和 overlay，包含 V1/V2 真实 loopback socket 到界面的全链路、来源切换缓存、断线重置及 native show/top/clickthrough 调用。通过 WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS 指定调试端口后启动 exe；脚本默认 CDP 地址 127.0.0.1:9227，测试完成关闭服务和 overlay。其发送端是协议 fixture，不能等同于真实音乐客户端验收。
 
-本次前端 26 项测试、Rust 8 项测试及浏览器/原生 fixture smoke 已通过。最终 release 已与用户正在运行的网易云 AMLL WS Connector 实际联通：自动重连成功，接收到了曲目信息、歌词与播放进度；监听地址为 ws://localhost:11444，来源为 orpheus://orpheus。未将用户歌曲正文或完整消息记录写入仓库。
+上一版（81d3fe1）前端 26 项测试、Rust 8 项测试及浏览器/原生 fixture smoke 已通过。该版 release 已与用户正在运行的网易云 AMLL WS Connector 实际联通：自动重连成功，接收到了曲目信息、歌词与播放进度；监听地址为 ws://localhost:11444，来源为 orpheus://orpheus。未将用户歌曲正文或完整消息记录写入仓库。插件管理 / Aurora 版本的新增检查和真实重连记录见 [本轮验证](plugins.md#本轮验证记录)。
 
 尚未验证：多显示器不同 DPI、独占全屏、实物声卡/显示器音画延迟、其他音乐客户端、SMTC、长期资源稳定性、无 WebView2 环境，以及未签名安装包的完整安装/升级流程。

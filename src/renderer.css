@@ -1,8 +1,11 @@
 .lyric-surface { width: 100%; box-sizing: border-box; padding: 26px 32px; border-radius: 16px; overflow-wrap: anywhere; white-space: pre-wrap; }
 .lyric-current { color: var(--lyric-color); filter: drop-shadow(0 1px var(--lyric-shadow) rgba(0,0,0,.8)); }
 .gradient-text .lyric-current { background: var(--lyric-paint); background-clip: text; -webkit-background-clip: text; color: transparent; }
-.lyric-word { position: relative; display: inline-block; white-space: pre; }
-.word-base { color: var(--lyric-inactive); }
+/* Word fills already own their gradient. A second ancestor text mask includes
+   animated descendants and can leave a displaced glyph surface in WebView2. */
+.gradient-text .lyric-current:has(.lyric-word), .gradient-text.aurora-surface .lyric-current { background: none; }
+.lyric-word { position: relative; display: inline-block; max-width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; vertical-align: bottom; }
+.word-base { display: block; color: var(--lyric-inactive); }
 .word-fill { position: absolute; inset: 0; color: var(--lyric-color); pointer-events: none; }
 .gradient-text .word-fill { background: var(--lyric-paint); background-clip: text; -webkit-background-clip: text; color: transparent; }
 .lyric-translation { color: var(--lyric-inactive); font-size: .45em; margin-top: 12px; font-weight: 400; }
@@ -10,3 +13,13 @@
 body.overlay-page { background: transparent !important; margin: 0; overflow: hidden; }
 .overlay-page #app { min-height: 100vh; display: flex; align-items: center; justify-content: center; }
 .overlay-page .lyric-surface { cursor: move; }
+/* WebView2 transparent HWNDs can present CSS filter glyph layers at (0,0).
+   Use paint-time text shadows instead of offscreen filter surfaces on overlay. */
+.overlay-page .lyric-current { filter: none; text-shadow: 0 1px var(--lyric-shadow) rgba(0,0,0,.8); }
+.overlay-resize-handle { position: fixed; top: 0; bottom: 0; width: 14px; z-index: 10; cursor: ew-resize; touch-action: none; }
+.overlay-resize-handle.resize-west { left: 0; }
+.overlay-resize-handle.resize-east { right: 0; }
+.overlay-resize-handle::after { content: ''; position: absolute; width: 3px; height: min(40px, 65%); top: 50%; left: 5px; transform: translateY(-50%); background: #bec7ff; border-radius: 3px; opacity: 0; transition: opacity .15s; }
+.overlay-resize-handle:hover::after { opacity: .85; }
+.overlay-adjustment-border { position: fixed; inset: 2px; border: 1px dashed #bec7ff; border-radius: 10px; pointer-events: none; z-index: 9; box-shadow: inset 0 0 0 1px #10122380; }
+.show-adjustment-border .overlay-resize-handle::after { opacity: .9; }

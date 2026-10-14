@@ -1,5 +1,5 @@
 import { invoke, isTauri } from '@tauri-apps/api/core';
-import { emit, listen } from '@tauri-apps/api/event';
+import { emit, emitTo, listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 
 export const desktop = isTauri();
@@ -19,8 +19,17 @@ export async function sendEvent(event: string, payload?: unknown): Promise<void>
   if (desktop) await emit(event, payload);
   else channel?.postMessage({ event, payload });
 }
+/** Playback/state belong to the overlay; broadcasting them also evaluates large
+ * payload scripts in the control window, which has no consumer for them. */
+export async function sendOverlayEvent(event: string, payload?: unknown): Promise<void> {
+  if (desktop) await emitTo({ kind: 'WebviewWindow', label: 'overlay' }, event, payload);
+  else channel?.postMessage({ event, payload });
+}
 export async function native<T>(command: string, args?: Record<string, unknown>): Promise<T> {
   if (!desktop) throw new Error('此功能需要桌面版 Lyrscape。');
   return invoke<T>(command, args);
 }
 export async function dragOverlay(): Promise<void> { if (desktop) await getCurrentWindow().startDragging(); }
+export async function resizeOverlay(direction: 'East' | 'West'): Promise<void> {
+  if (desktop) await getCurrentWindow().startResizeDragging(direction);
+}

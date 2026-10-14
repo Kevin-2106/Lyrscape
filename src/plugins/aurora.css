@@ -1,0 +1,48 @@
+.aurora-surface { position: relative; isolation: isolate; overflow: hidden; perspective: 700px; padding-top: 42px; padding-bottom: 42px; }
+/* Beat swell lives on the line, so it never fights the per-unit entrance transforms. */
+.aurora-surface .lyric-current { transform: scale(calc(1 + var(--aurora-beat, 0) * 0.035)); transform-origin: 50% 60%; }
+.aurora-unit { position: relative; display: inline-block; max-width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; transform-origin: 50% 70%; }
+.aurora-block { display: block; white-space: pre-wrap; }
+.aurora-glyph { isolation: isolate; text-shadow: none; }
+.aurora-solid { display: block; position: relative; z-index: 1; color: var(--lyric-color); text-shadow: none; }
+.aurora-glow-layer { display: block; position: absolute; inset: 0; z-index: 0; pointer-events: none; color: transparent; text-shadow: 0 1px var(--lyric-shadow) rgba(0,0,0,.8); }
+.aurora-glow-layer::before { content: attr(data-glow-text); }
+.aurora-glow .aurora-glow-layer { text-shadow: 0 0 8px var(--lyric-color), 0 1px var(--lyric-shadow) rgba(0,0,0,.8); }
+.gradient-text.aurora-surface .word-fill { background: none; }
+.gradient-text.aurora-surface .aurora-solid { background: var(--lyric-paint); background-clip: text; -webkit-background-clip: text; color: transparent; }
+/* Keep the foreground sharp and guard against offscreen filter surfaces on
+   transparent native views. Glow is painted only by the rear glyph layer. */
+.overlay-page .aurora-unit { filter: none !important; }
+.overlay-page .aurora-surface .lyric-current { filter: none; text-shadow: none; }
+.aurora-surface.aurora-motion { padding-inline: min(72px, 12%); }
+.aurora-motion .aurora-unit { animation-duration: var(--entry-duration); animation-delay: var(--entry-delay); animation-fill-mode: backwards; animation-timing-function: cubic-bezier(.16,1,.3,1); }
+.aurora-motion[data-entrance="comet"] .aurora-unit { animation-name: aurora-comet; }
+.aurora-motion[data-entrance="orbit"] .aurora-unit { animation-name: aurora-orbit; }
+.aurora-motion[data-entrance="prism"] .aurora-unit { animation-name: aurora-prism; }
+.aurora-ornament { position: absolute; inset: 0; pointer-events: none; z-index: -1; display: none; }
+.aurora-sparks .aurora-ornament { display: block; }
+.aurora-ornament::before { content: ''; position: absolute; width: 65%; height: 1px; left: 17%; top: 55%; background: linear-gradient(90deg, transparent, var(--lyric-color), transparent); opacity: .22; }
+.aurora-ornament i { position: absolute; width: 5px; height: 5px; background: var(--lyric-color); border-radius: 50%; left: calc(10% + var(--spark-index) * 11%); top: calc(25% + mod(var(--spark-index), 3) * 20%); opacity: .2; box-shadow: 0 0 12px var(--lyric-color); }
+.aurora-sparks .aurora-ornament i { animation: aurora-twinkle calc(3600ms + mod(var(--spark-index), 3) * 700ms) ease-in-out infinite; animation-delay: calc(var(--spark-index) * -600ms); }
+.aurora-motion.aurora-sparks .aurora-ornament::before { animation: aurora-sweep var(--entry-duration) ease-out backwards; }
+@keyframes aurora-comet {
+  0% { opacity: 0; transform: translate(calc(-50px * var(--entry-intensity)), calc(38px * var(--entry-intensity))) rotate(calc(-16deg * var(--entry-sign))) scale(.65); }
+  65% { opacity: 1; transform: translate(0, -5px) rotate(2deg) scale(1.06); }
+  100% { opacity: 1; transform: none; }
+}
+@keyframes aurora-orbit {
+  0% { opacity: 0; transform: translateY(calc(45px * var(--entry-intensity))) rotateY(calc(110deg * var(--entry-sign))) rotateZ(calc(28deg * var(--entry-sign))) scale(.4); }
+  70% { opacity: 1; transform: translateY(-4px) rotateY(-8deg) scale(1.08); }
+  100% { opacity: 1; transform: none; }
+}
+@keyframes aurora-prism {
+  0% { opacity: 0; transform: translateY(calc(-32px * var(--entry-intensity))) scaleX(.15) scaleY(1.8) skewX(calc(30deg * var(--entry-sign))); }
+  70% { opacity: 1; transform: scaleX(1.1) scaleY(.95); }
+  100% { opacity: 1; transform: none; }
+}
+@keyframes aurora-twinkle { 0%, 100% { opacity: .12; } 50% { opacity: .45; } }
+@keyframes aurora-sweep { 0% { opacity: 0; transform: scaleX(.05); } 50% { opacity: .65; } 100% { opacity: .22; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .aurora-surface .lyric-current { transform: none !important; }
+  .aurora-motion .aurora-unit, .aurora-ornament i, .aurora-ornament::before { animation: none !important; }
+}
