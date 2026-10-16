@@ -1,6 +1,7 @@
 param([Parameter(Mandatory = $true)][int]$AppProcessId, [string]$Snapshot = 'qa/app-session-before-update.json')
 $ErrorActionPreference = 'Stop'
 $session = Get-Content -LiteralPath $Snapshot | ConvertFrom-Json
+if ($null -eq $session.position -or $null -eq $session.size) { Write-Output 'No overlay geometry was allocated in this session.'; return }
 Add-Type @'
 using System;
 using System.Runtime.InteropServices;

@@ -1,4 +1,5 @@
 import type { AppState, PluginManagement, GlobalShortcuts } from '../sdk/types';
+import type { ConfirmOptions } from './kit/dialog';
 
 export type MaybeAsync = void | Promise<void>;
 
@@ -24,7 +25,7 @@ export interface UiContext {
   resetEverything(): void;
 }
 
-export type PageId = 'lyrics' | 'style' | 'overlay' | 'plugins' | 'about';
+export type PageId = 'lyrics' | 'renderers' | 'effects' | 'plugins' | 'settings';
 export type ToastKind = 'info' | 'success' | 'error';
 
 /** Shell facilities shared by every page. */
@@ -33,8 +34,9 @@ export interface UiServices {
   notify(text: string, kind?: ToastKind): void;
   /** Runs a command and reports failures as toasts. Resolves true on success. */
   perform(action: () => MaybeAsync, success?: string): Promise<boolean>;
-  navigate(id: PageId): void;
-  confirm(options: { title: string; body: string; accept: string; danger?: boolean }): Promise<boolean>;
+  /** Opens a page; `target` lets the page reveal a part of itself (an inspector tab, a plugin). */
+  navigate(id: PageId, target?: string): void;
+  confirm(options: ConfirmOptions): Promise<boolean>;
 }
 
 export interface PageInstance {
@@ -44,11 +46,15 @@ export interface PageInstance {
   deactivate?(): void;
   /** Named actions the shell can trigger from shortcuts, e.g. `import`. */
   commands?: Record<string, () => void>;
+  /** Shows a part of the page named by `navigate(id, target)`. */
+  reveal?(target: string): void;
   dispose(): void;
 }
 
 export interface PageDefinition {
   id: PageId;
+  /** First-level menu the page sits under; pages with the same group are listed together. */
+  group: string;
   title: string;
   subtitle: string;
   icon: string;

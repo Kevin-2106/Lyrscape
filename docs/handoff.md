@@ -2,6 +2,8 @@
 
 2026-10-13。先读 `README.md / CONTRIBUTING.md`，再读 `development.md / plugin-development.md`。实际功能及边界见 `baseline.md / plugins.md`，目标设计见 `architecture.md / roadmap.md`。
 
+2026-10-16 补充：第二轮常驻内存优化与最终交付见 [按需窗口及字体子集](memory-footprint.md)。overlay 不再开机创建，状态/穿透/边框可在创建前使用；隔离 smoke 需要窗口时调用 `showNativeOverlay`。保持本地插件文件，旧 bundle 有字体兼容路径，重建后才获得完整按需收益。最终前端 96 / Rust 16 项测试及原生验证通过，默认 exe 已更新，原 exe 保留。
+
 ## 先核实，不覆盖
 
 ```powershell
@@ -46,6 +48,7 @@ Get-CimInstance Win32_Process -Filter "name = 'lyrscape.exe'" |
 脚本角色：
 
 - `smoke-browser.mjs`：原有文字样式、解析显示、存储和窗口同步。
+- `smoke-packages.mjs`：`.lyrx` 导入（篡改拒绝、确认、校验）→ 两窗口运行 → 重启自动加载并恢复选择 → 导出带配置 → 卸载回退。先运行 `npm run plugin:pack -- examples/plugins/wave/index.mjs`。
 - `smoke-plugins.mjs`：分类 / 配置 / renderer 与 AMLL 启停（会改状态）。
 - `smoke-overlay-layout.mjs`：长行 / 长字词换行、无假时间填充和 resize DOM。
 - `smoke-pv.mjs`：三个 PV 插件的精确时间弹入 / 弹出、暂停、seek、持久化、回退和跨窗口同步。

@@ -4,7 +4,17 @@
 
 ## 使用
 
-点击窗口顶部「插件与配置」进入管理区域。可按分类或名称 / ID 筛选，查看运行状态、服务和依赖，展开「配置与依赖」调整插件的独立参数。所有配置在当前设备自动保存；预览与 overlay 共用渲染器选择和配置。
+侧栏分两级（2026-10-15 桌面化重做）：
+
+| 一级 | 二级页面 | 用途 |
+| --- | --- | --- |
+| 播放 | 歌词 | 大预览、播放来源（本地演示 / AMLL）、导入歌词 |
+| 插件 | 渲染器 | 左侧样式列表，中间实时预览（深色 / 浅色 / 透明背景），右侧检查器分「选项」（当前渲染器的配置）与「文字」（字体、颜色、显示细节，原「文字样式」页） |
+| 插件 | 特效 | 特效插件开关与配置（如节拍检测） |
+| 插件 | 全部插件 | 按职责分组（渲染器 / 特效与音频 / 播放与解析 / 系统组件）+ 已安装 / 已停用 / 需要处理筛选；列表 + 详情；导入、导出、卸载、热重载、重新扫描 |
+| 应用 | 设置 | 桌面歌词窗口、全局与应用内快捷键、数据重置、关于 |
+
+日常需要交互的插件职责有独立页面，其余插件只在「全部插件」中管理。所有配置在当前设备自动保存；预览与 overlay 共用渲染器选择和配置。插件以 `.lyrx` 包动态安装，见 [插件编写手册](plugin-authoring.md)。
 
 默认仍为「普通文字」。在「Aurora · 流光」卡片点击「使用此渲染器」，即可启用动画歌词。AMLL 接入与 renderer 独立，切换视觉不会停止播放器连接或改变歌词时间。
 
@@ -45,9 +55,10 @@ Aurora 提供三种进入方式：彗星飞入、旋转落位、棱镜展开。�
 - `src/kernel/host.ts`：生命周期、服务归属查询及带依赖检查的 deactivate；启用复用已有激活与回滚机制。
 - `src/plugins/renderer.ts`：公开 DOM renderer 构造 hooks 和 mount scope 管理；普通 renderer 与 Aurora 共享文本 / 时间填充能力。Aurora 通过构造 hooks 获取自己的节点，不修改另一插件的私有 DOM。
 - renderer 独立提供 `renderer.text@1` / `renderer.aurora@1`，选择插件提供 `renderer@1`。surface 与设置 UI 仅依赖选择后的 renderer 服务。
-- `src/ui/plugin-manager.ts`（挂在「插件」页）：独立管理 UI，用 `PluginManagement` 和状态订阅调用功能。
+- `src/ui/plugin-manager.ts`（挂在「全部插件」页）：分组导航、列表、详情、导入 / 导出 / 卸载，用 `PluginManagement` 和状态订阅调用功能。`src/ui/components/look-panel.ts` 提供渲染器列表、渲染器选项与特效卡片，`src/ui/kit/config-fields.ts` 根据 manifest fields 生成设置行。
+- `src/plugins/package.ts`（`.lyrx` 校验 / 生成）、`storage.ts`（桌面 exe 旁 `plugins/`，浏览器 IndexedDB）、`sdk.ts`（`sdk@1` 服务）；`PluginManagement.install / uninstall / exportPackage`。
 
-持久化使用 `lyrscape.plugins.v1`，与已有 `lyrscape.settings.v1` 分开。旧设置无需迁移；损坏或未知的 renderer 配置恢复为普通文字。启动失败的恢复按钮同时清除两份设置。第三方安装、卸载包、版本协商、权限声明和执行隔离未实现，不能用这个管理界面运行不可信代码。
+持久化使用 `lyrscape.plugins.v1`，与已有 `lyrscape.settings.v1` 分开。旧设置无需迁移；损坏或未知的 renderer 配置恢复为普通文字。启动失败的恢复按钮同时清除两份设置。`.lyrx` 安装 / 卸载 / 导出已实现（renderer 与 effect；启动时自动加载已安装插件并恢复所选渲染器）。版本协商、权限声明和执行隔离仍未实现：安装前会显示信任警告，不能用来运行不可信代码。
 
 ## 验证
 

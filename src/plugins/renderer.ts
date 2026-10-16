@@ -90,7 +90,8 @@ export function createDomRenderer(hooks: DomRendererHooks = {}): Renderer { retu
         const typeset = (element: HTMLElement, songLang: Lang) => {
           const text = element.textContent ?? '', lang = text ? lineLang(text, songLang) : songLang;
           element.lang = langTag(lang);
-          element.style.fontFamily = auto ? themeFamily(s.fontFamily, lang, text) : '';
+          const family = themeFamily(s.fontFamily, lang, text);
+          element.style.fontFamily = auto ? family : '';
         };
         typeset(line, langs.lyrics); typeset(translation, langs.translation); typeset(next, langs.lyrics);
         hooks.line?.(root, line, state);

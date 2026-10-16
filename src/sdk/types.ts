@@ -42,16 +42,18 @@ export interface PluginPreferences {
   enabled: Record<string, boolean>;
   configs: Record<string, Record<string, ConfigValue>>;
 }
-export interface PluginInfo {
+/** Optional authorship metadata shown in the plugin manager. */
+export interface PluginCredits { author?: string; homepage?: string; license?: string; tags?: string[] }
+export interface PluginInfo extends PluginCredits {
   id: string; name: string; description: string; version: string; category: PluginCategory;
-  essential?: boolean; rendererService?: string; fields?: ConfigField[];
+  essential?: boolean; rendererService?: string; fields?: ConfigField[]; surfaces?: ('control' | 'overlay')[];
 }
 /**
  * Display and configuration metadata a plugin module carries with its code
  * (named export `manifest`). Required for plugins added by a catalog rescan;
  * optional when hot-reloading an already registered plugin.
  */
-export interface PluginManifest {
+export interface PluginManifest extends PluginCredits {
   id: string; name: string; description: string; category: PluginCategory; version?: string;
   rendererService?: string; fields?: ConfigField[];
   /** Windows that run the plugin; defaults to both for renderers and effects, otherwise the control window. */
@@ -62,7 +64,26 @@ export type PluginOrigin = 'builtin' | 'source' | 'local';
 export interface PluginStatus extends PluginInfo {
   active: boolean; busy: boolean; error?: string; requires: string[]; provides: string[];
   reloadable?: boolean; reloadSource?: 'source' | 'local'; reloadRevision?: number; origin: PluginOrigin;
+  /** Code can be written out as a `.lyrx` package (installed plugins; every catalog plugin in development). */
+  exportable?: boolean;
+  /** Installed from a package or the plugins folder, so it can be uninstalled. */
+  removable?: boolean;
 }
+/**
+ * `.lyrx` plugin package: one UTF-8 JSON file carrying the manifest, the ES module
+ * and its stylesheet. See docs/plugin-authoring.md.
+ */
+export interface PluginPackage {
+  format: 'lyrscape.plugin'; formatVersion: 1;
+  manifest: PluginManifest;
+  javascript: string; css?: string;
+  /** Configuration applied on install when this device has none stored for the plugin. */
+  config?: Record<string, ConfigValue>;
+  /** `sha256-<base64>` of UTF-8 javascript, a NUL byte, UTF-8 css. Checked when present. */
+  integrity?: string;
+  exportedAt?: string;
+}
+export interface InstallResult { id: string; action: 'installed' | 'updated' }
 /** Result of rescanning the plugin catalog. */
 export interface CatalogReport {
   added: string[]; updated: string[]; removed: string[];
@@ -83,6 +104,13 @@ export interface PluginManagement {
   rescan(source?: 'source' | 'local'): Promise<CatalogReport>;
   /** Whether rescanning is available from `source` in this window. */
   canRescan(source: 'source' | 'local'): boolean;
+  /** Writes a validated package to the plugin store and registers (or hot-reloads) it in both windows. */
+  install(pkg: PluginPackage): Promise<InstallResult>;
+  /** Stops an installed plugin in both windows and deletes its files. */
+  uninstall(id: string): Promise<void>;
+  /** The plugin's current code and configuration as a package. */
+  exportPackage(id: string): Promise<PluginPackage>;
+  canInstall(): boolean;
 }
 
 export type ShortcutAction = 'visibility' | 'clickthrough' | 'border';

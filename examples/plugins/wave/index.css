@@ -1,0 +1,4 @@
+/* Scoped to this renderer's root, so other renderers are untouched. */
+.wave-lyric .wave-unit, .wave-lyric .lyric-word { display: inline-block; white-space: pre; }
+.wave-lyric[data-wave-tint="glow"] .lyric-current { text-shadow: 0 0 18px rgba(170, 190, 255, .55); }
+.wave-lyric[data-wave-tint="outline"] .lyric-current { -webkit-text-stroke: 1px rgba(255, 255, 255, .45); }

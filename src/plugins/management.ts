@@ -1,6 +1,8 @@
 import type { Plugin, PluginHost } from '../kernel/host';
 import type { Store } from '../kernel/store';
-import type { AppState, CatalogReport, ConfigField, ConfigValue, PluginInfo, PluginManagement, PluginManifest, PluginPreferences, Renderer } from '../sdk/types';
+import type { AppState, CatalogReport, ConfigField, ConfigValue, InstallResult, PluginInfo, PluginManagement, PluginManifest, PluginOrigin, PluginPreferences, Renderer } from '../sdk/types';
+import { createPackage } from './package';
+import type { PluginFiles } from './storage';
 import { builtinManifests, TEXT_RENDERER } from './manifests';
 import { legacyPvIds } from './pv-presets';
 import { ADDABLE_CATEGORIES, infoOf, metadataKey, PluginRegistry, validateManifest, type RegistryEntry } from './registry';
@@ -20,6 +22,15 @@ export interface PluginReloader {
   add?(id: string, source: 'source' | 'local'): Promise<PreparedAddition>;
   /** Drops a removed plugin from the other window. */
   remove?(id: string): Promise<void>;
+  /** The plugin store behind the 'local' source (exe-side folder or browser storage). */
+  files?: {
+    read(id: string): Promise<PluginFiles | undefined>;
+    write(files: PluginFiles): Promise<void>;
+    remove(id: string): Promise<void>;
+  };
+  /** Current code of a plugin for export. */
+  exportBundle?(id: string, origin: PluginOrigin): Promise<{ javascript: string; css: string }>;
+  exportable?(id: string, origin: PluginOrigin): boolean;
 }
 
 /** Renderer names for UI labels; the plain text renderer is always available. */
@@ -117,10 +128,55 @@ export function createPluginManagement(host: PluginHost, store: Store<AppState>,
   };
   const scanning = new Set<'source' | 'local'>();
 
+  /** Registers and starts (if enabled) a plugin the catalog lists but this window does not run yet. */
+  const addNow = async (id: string, source: 'source' | 'local') => {
+    const addition = await reloader!.add!(id, source);
+    const manifest = validateManifest(addition.manifest, id);
+    try {
+      if (!ADDABLE_CATEGORIES.includes(manifest.category)) throw Error('运行中只能新增渲染器或特效插件；其他类别需要重新构建应用');
+      const owner = manifest.rendererService && registry.serviceOwner(manifest.rendererService);
+      if (owner) throw Error(`服务 ${manifest.rendererService} 已由 ${owner} 提供`);
+      const stored = store.get().plugins;
+      const enabled = stored.enabled[id] !== false;
+      if (enabled) await host.start([addition.plugin]);
+      registry.set({ info: infoOf(manifest), plugin: addition.plugin, origin: source });
+      update({ ...stored, enabled: { ...stored.enabled, [id]: enabled },
+        configs: { ...stored.configs, [id]: normalizeConfig(manifest.fields ?? [], stored.configs[id]) } });
+      await addition.commit();
+    } catch (error) {
+      if (registry.has(id)) registry.remove(id);
+      if (host.activePlugins.includes(id)) host.deactivate(id);
+      await addition.abort().catch(console.error);
+      throw error;
+    }
+  };
+  /** Stops a plugin in both windows and forgets it; `fallback` moves the renderer selection to plain text. */
+  const removeNow = async (id: string, fallback = true) => {
+    if (host.activePlugins.includes(id)) { await beforeDisable(id); host.deactivate(id); }
+    await reloader?.remove?.(id);
+    registry.remove(id); errors.delete(id); reloads.delete(id);
+    const current = store.get().plugins;
+    if (fallback && current.rendererId === id) update({ ...current, rendererId: TEXT_RENDERER });
+  };
+  const reloadNow = async (id: string, source: 'source' | 'local') => {
+    try {
+      errors.delete(id);
+      if (!host.activePlugins.includes(id)) throw new Error('请先启用插件再热重载');
+      const result = await reloader!.reload(id, source, find(id).plugin);
+      const loaded: LoadedPlugin = 'activate' in result ? { plugin: result } : result;
+      registry.update(id, { plugin: loaded.plugin });
+      if (loaded.manifest) applyInfo(find(id), loaded.manifest);
+      reloads.set(id, { source, revision: (reloads.get(id)?.revision ?? 0) + 1 });
+      // Selection/configuration are preserved; views observe the new service instance.
+      store.update(s => ({ ...s }));
+    } catch (error) { errors.set(id, message(error)); throw error; }
+  };
+
   const management: PluginManagement = {
     list: () => registry.list().map(({ info, plugin, origin }) => ({ ...info, origin, active: host.activePlugins.includes(info.id),
       busy: pending.has(info.id), error: errors.get(info.id), requires: plugin.requires ?? [], provides: host.providedServices(info.id),
-      reloadable: !info.essential && Boolean(reloader?.supports(info.id)), reloadSource: reloads.get(info.id)?.source, reloadRevision: reloads.get(info.id)?.revision })),
+      reloadable: !info.essential && Boolean(reloader?.supports(info.id)), reloadSource: reloads.get(info.id)?.source, reloadRevision: reloads.get(info.id)?.revision,
+      exportable: !info.essential && Boolean(reloader?.exportBundle && reloader.exportable?.(info.id, origin)), removable: origin === 'local' && Boolean(reloader?.files) })),
     subscribe: listener => { listeners.add(listener); return () => listeners.delete(listener); },
     setEnabled(id, enabled) {
       const { info } = find(id);
@@ -157,19 +213,7 @@ export function createPluginManagement(host: PluginHost, store: Store<AppState>,
     reload(id, source = 'source') {
       const entry = find(id);
       if (entry.info.essential || !reloader?.supports(id)) return Promise.reject(new Error('当前插件未开放手动热重载'));
-      return serialized([id], async () => {
-        try {
-          errors.delete(id);
-          if (!host.activePlugins.includes(id)) throw new Error('请先启用插件再热重载');
-          const result = await reloader.reload(id, source, find(id).plugin);
-          const loaded: LoadedPlugin = 'activate' in result ? { plugin: result } : result;
-          registry.update(id, { plugin: loaded.plugin });
-          if (loaded.manifest) applyInfo(find(id), loaded.manifest);
-          reloads.set(id, { source, revision: (reloads.get(id)?.revision ?? 0) + 1 });
-          // Selection/configuration are preserved; views observe the new service instance.
-          store.update(s => ({ ...s }));
-        } catch (error) { errors.set(id, message(error)); throw error; }
-      });
+      return serialized([id], () => reloadNow(id, source));
     },
     canRescan: source => Boolean(reloader?.catalog && reloader.canRescan?.(source)),
     rescan(source = 'source') {
@@ -189,25 +233,7 @@ export function createPluginManagement(host: PluginHost, store: Store<AppState>,
               else report.unchanged.push(item.id);
               continue;
             }
-            const addition = await reloader.add!(item.id, source);
-            const manifest = validateManifest(addition.manifest, item.id);
-            try {
-              if (!ADDABLE_CATEGORIES.includes(manifest.category)) throw Error('运行中只能新增渲染器或特效插件；其他类别需要重新构建应用');
-              const owner = manifest.rendererService && registry.serviceOwner(manifest.rendererService);
-              if (owner) throw Error(`服务 ${manifest.rendererService} 已由 ${owner} 提供`);
-              const stored = store.get().plugins;
-              const enabled = stored.enabled[item.id] !== false;
-              if (enabled) await host.start([addition.plugin]);
-              registry.set({ info: infoOf(manifest), plugin: addition.plugin, origin: source });
-              update({ ...stored, enabled: { ...stored.enabled, [item.id]: enabled },
-                configs: { ...stored.configs, [item.id]: normalizeConfig(manifest.fields ?? [], stored.configs[item.id]) } });
-              await addition.commit();
-            } catch (error) {
-              if (registry.has(item.id)) registry.remove(item.id);
-              if (host.activePlugins.includes(item.id)) host.deactivate(item.id);
-              await addition.abort().catch(console.error);
-              throw error;
-            }
+            await addNow(item.id, source);
             report.added.push(item.id);
           } catch (error) { report.failed.push({ id: item.id, error: message(error) }); }
         }
@@ -215,19 +241,65 @@ export function createPluginManagement(host: PluginHost, store: Store<AppState>,
         const removable = registry.list().filter(entry => !entry.info.essential && !listed.has(entry.info.id)
           && (source === 'source' ? entry.origin !== 'local' : entry.origin === 'local'));
         for (const entry of removable) {
-          const id = entry.info.id;
-          try {
-            if (host.activePlugins.includes(id)) { await beforeDisable(id); host.deactivate(id); }
-            await reloader.remove?.(id);
-            registry.remove(id); errors.delete(id); reloads.delete(id);
-            const current = store.get().plugins;
-            if (current.rendererId === id) update({ ...current, rendererId: TEXT_RENDERER });
-            report.removed.push(id);
-          } catch (error) { report.failed.push({ id, error: message(error) }); }
+          try { await removeNow(entry.info.id); report.removed.push(entry.info.id); }
+          catch (error) { report.failed.push({ id: entry.info.id, error: message(error) }); }
         }
         store.update(s => ({ ...s }));
         return report;
       }).finally(() => { scanning.delete(source); notify(); });
+    },
+    canInstall: () => Boolean(reloader?.files && reloader.add && reloader.canRescan?.('local')),
+    install(pkg) {
+      const files = reloader?.files;
+      if (!files || !management.canInstall()) return Promise.reject(new Error('当前窗口不能安装插件'));
+      const { manifest } = pkg, id = manifest.id;
+      return serialized([id], async (): Promise<InstallResult> => {
+        const existing = registry.get(id);
+        if (existing && existing.origin !== 'local') throw Error(`ID ${id} 已被${existing.origin === 'builtin' ? '内置' : '开发源码中的'}插件「${existing.info.name}」使用，不能覆盖`);
+        if (!ADDABLE_CATEGORIES.includes(manifest.category)) throw Error('目前只能安装渲染器或特效插件；其他类别需要宿主接线');
+        const owner = manifest.rendererService && registry.serviceOwner(manifest.rendererService, id);
+        if (owner) throw Error(`服务 ${manifest.rendererService} 已由 ${owner} 提供`);
+        const hadConfig = store.get().plugins.configs[id] !== undefined;
+        const previous = existing ? await files.read(id) : undefined;
+        await files.write({ id, javascript: pkg.javascript, css: pkg.css ?? '' });
+        try {
+          if (!existing) await addNow(id, 'local');
+          else if (host.activePlugins.includes(id)) await reloadNow(id, 'local');
+          else { await removeNow(id, false); await addNow(id, 'local'); }
+        } catch (error) {
+          // Leave the store as it was: a broken package must not be picked up by the next scan.
+          await (previous ? files.write(previous) : files.remove(id)).catch(console.error);
+          if (existing && !registry.has(id)) await addNow(id, 'local').catch(console.error);
+          throw error;
+        }
+        if (pkg.config && !hadConfig) {
+          const current = store.get().plugins;
+          update({ ...current, configs: { ...current.configs, [id]: normalizeConfig(find(id).info.fields ?? [], pkg.config) } });
+        }
+        store.update(s => ({ ...s }));
+        return { id, action: existing ? 'updated' : 'installed' };
+      });
+    },
+    uninstall(id) {
+      const entry = registry.get(id), files = reloader?.files;
+      if (!entry) return Promise.reject(new Error(`插件未注册：${id}`));
+      if (entry.origin !== 'local' || !files) return Promise.reject(new Error('只有已安装的插件可以卸载；内置插件可以停用'));
+      return serialized([id], async () => {
+        await files.remove(id);
+        await removeNow(id);
+        const current = store.get().plugins, enabled = { ...current.enabled }, configs = { ...current.configs };
+        delete enabled[id]; delete configs[id];
+        update({ ...current, enabled, configs });
+        store.update(s => ({ ...s }));
+      });
+    },
+    async exportPackage(id) {
+      const { info, origin } = find(id);
+      if (info.essential || !reloader?.exportBundle || !reloader.exportable?.(id, origin)) throw Error('这个插件随应用内置，没有可导出的代码；开发模式下可以导出');
+      const bundle = await reloader.exportBundle(id, origin);
+      const manifest: PluginManifest = { id: info.id, name: info.name, description: info.description, category: info.category, version: info.version };
+      for (const key of ['rendererService', 'fields', 'surfaces', 'author', 'homepage', 'license', 'tags'] as const) if (info[key] !== undefined) Object.assign(manifest, { [key]: info[key] });
+      return createPackage(manifest, bundle.javascript, bundle.css, store.get().plugins.configs[id]);
     },
   };
   return management;

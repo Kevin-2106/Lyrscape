@@ -5,17 +5,24 @@ import { desktop, native, onEvent, sendEvent } from '../platform';
 import type { LoadedPlugin, PluginReloader, PreparedAddition } from './management';
 import type { AmllAdapter } from './amll';
 import { infoOf, PLUGIN_ID, surfacesOf, validateManifest, type PluginRegistry } from './registry';
+import { pluginStorage } from './storage';
+import { prepareLegacyPluginFonts } from './font-assets';
 
 /** `added` marks plugins a rescan registered; `removed` tells a late overlay to drop one. */
 type Bundle = { id: string; javascript?: string; css?: string; builtin?: boolean; added?: boolean; removed?: boolean };
 type Phase = 'prepare' | 'commit' | 'rollback' | 'finish' | 'remove';
 type Request = { transaction: string; phase: Phase; bundle: Bundle };
 type Reply = { key: string; error?: string };
-export interface ManualReload extends PluginReloader { ready(): Promise<void> }
+export interface ManualReload extends PluginReloader {
+  ready(): Promise<void>;
+  /** Control window: pushes every loaded bundle to the overlay (after the boot scan, when both windows start together). */
+  broadcast(): Promise<void>;
+}
 
 /** Imports a bundle (default export: Plugin or factory; optional named export `manifest`). */
 export async function importPluginBundle(bundle: Bundle, store: Store<AppState>): Promise<LoadedPlugin> {
   if (!PLUGIN_ID.test(bundle.id) || typeof bundle.javascript !== 'string' || bundle.javascript.length > 2 * 1024 * 1024 || (bundle.css?.length ?? 0) > 512 * 1024) throw Error('重载文件不符合插件接口或大小限制');
+  await prepareLegacyPluginFonts(bundle.javascript);
   const url = URL.createObjectURL(new Blob([bundle.javascript], { type: 'text/javascript' }));
   let value: unknown, manifest: PluginManifest | undefined;
   try {
@@ -57,7 +64,10 @@ export function manualReloadPlugin(host: PluginHost, store: Store<AppState>, ove
       return importPluginBundle(bundle, store);
     };
     const fetchBundle = async (id: string, source: 'source' | 'local'): Promise<Bundle> => {
-      if (source === 'local') return native<Bundle>('plugin_source', { id });
+      if (source === 'local') {
+        if (!pluginStorage) throw Error('当前环境没有本地插件存储');
+        return pluginStorage.read(id);
+      }
       if (import.meta.env.DEV) return devJson<Bundle>(`/__lyrscape/plugin-source/${encodeURIComponent(id)}`);
       return { id, builtin: true };
     };
@@ -72,6 +82,9 @@ export function manualReloadPlugin(host: PluginHost, store: Store<AppState>, ove
       registry.remove(id);
     };
     const peer = async (phase: Phase, bundle: Bundle, transaction: string, optional = false) => {
+      // A not-yet-created overlay has no resources to transact against. It will
+      // replay the committed bundles via plugin-reload-sync-request on first show.
+      if (desktop && !await native<boolean>('overlay_exists')) return false;
       const key = `${transaction}:${phase}`;
       return new Promise<boolean>((resolve, reject) => {
         const timeout = window.setTimeout(() => {
@@ -139,8 +152,10 @@ export function manualReloadPlugin(host: PluginHost, store: Store<AppState>, ove
           for (const bundle of bundles) {
             if (bundle.removed) { unregister(bundle.id); continue; }
             if (bundle.id === 'official.adapter.amll') continue;
+            const known = committed.get(bundle.id);
+            if (known && known.javascript === bundle.javascript && known.css === bundle.css && host.definition(bundle.id)) continue;
             if (!host.definition(bundle.id)) {
-              if (bundle.added) await register(await load(bundle));
+              if (bundle.added) { await register(await load(bundle)); committed.set(bundle.id, bundle); }
               continue;
             }
             const loaded = await load(bundle);
@@ -163,6 +178,9 @@ export function manualReloadPlugin(host: PluginHost, store: Store<AppState>, ove
         ready = true;
         if (overlay) await sendEvent('plugin-reload-sync-request');
         else await sendEvent('plugin-catalog-reset');
+      },
+      async broadcast() {
+        if (!overlay && ready) await sendEvent('plugin-reload-sync', [...committed.values()].filter(b => b.id !== 'official.adapter.amll'));
       },
       async reload(id, source, previous) {
         if (overlay) throw Error('请在控制面板触发热重载');
@@ -194,10 +212,10 @@ export function manualReloadPlugin(host: PluginHost, store: Store<AppState>, ove
           throw Error(`重载未应用，已保留或恢复上一版：${String(error)}`);
         }
       },
-      canRescan: source => !overlay && (source === 'source' ? Boolean(import.meta.env.DEV) : desktop),
+      canRescan: source => !overlay && (source === 'source' ? Boolean(import.meta.env.DEV) : Boolean(pluginStorage)),
       async catalog(source) {
         if (source === 'local') {
-          const ids = await native<string[]>('plugin_catalog');
+          const ids = await pluginStorage!.list();
           return ids.filter(id => PLUGIN_ID.test(id)).map(id => ({ id }));
         }
         if (!import.meta.env.DEV) throw Error('只有开发模式可以扫描源码目录');
@@ -225,6 +243,18 @@ export function manualReloadPlugin(host: PluginHost, store: Store<AppState>, ove
         const bundle: Bundle = { id, removed: true };
         committed.set(id, bundle);
         await peer('remove', bundle, crypto.randomUUID(), !desktop);
+      },
+      files: pluginStorage && !overlay ? {
+        read: id => pluginStorage!.read(id).catch(() => undefined),
+        write: files => pluginStorage!.write(files),
+        remove: id => pluginStorage!.remove(id),
+      } : undefined,
+      // Installed plugins export their files; in development every catalog plugin can be bundled from source.
+      exportable: (id, origin) => !overlay && (origin === 'local' ? Boolean(pluginStorage) : Boolean(import.meta.env.DEV) && supports(id)),
+      async exportBundle(id, origin) {
+        const bundle = await fetchBundle(id, origin === 'local' ? 'local' : 'source');
+        if (bundle.builtin || typeof bundle.javascript !== 'string') throw Error('这个插件没有可导出的代码');
+        return { javascript: bundle.javascript, css: bundle.css ?? '' };
       },
     };
     ctx.provide<ManualReload>('plugins.reload@1', service);

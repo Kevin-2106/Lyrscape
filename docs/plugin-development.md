@@ -1,6 +1,6 @@
 # 当前插件开发指南
 
-2026-10-13。本指南只描述能在当前代码中运行的接口。`architecture.md` 中的第三方包、权限协商、Worker / iframe、通用 effect 插槽仍是目标设计。
+2026-10-13。本指南面向修改宿主与内置插件的开发者；只想写一个可分发的渲染器 / 特效，请看 [插件编写手册](plugin-authoring.md)（`.lyrx` 包，无需改动应用代码）。本指南只描述能在当前代码中运行的接口。`architecture.md` 中的第三方包、权限协商、Worker / iframe、通用 effect 插槽仍是目标设计。
 
 开发源码与桌面本地 JS 现在支持[手动热重载](manual-plugin-reload.md)：插件卡片中选择来源并点击「热重载」。开放的 ID、资源清理、双窗口同步和失败恢复要求见该说明。
 
@@ -52,7 +52,7 @@ const plugin: Plugin = {
 
 1. 在 `src/plugins/manifests.ts` 的 `builtinManifests` 增加 manifest：`{ id, name, description, category: 'renderer', rendererService: 'renderer.example-rise@1', fields }`。这是纯数据文件（开发服务器在 Node 中读取它列出目录），不要在这里导入插件代码。PV 风格只需在 `pv-presets.ts` 增加 profile，会自动进入目录。
 2. 在 `src/plugins/catalog.ts` 的 `factories` 增加 `[id]: store => starterPlugin`。缺少工厂会在启动时报错。
-3. 开发模式下到「插件」页点「重新扫描插件列表」：新插件在控制面板与桌面歌词中同时注册并激活，卡片、配置、选择路由和预览标签全部来自 manifest；不存在或停用时回退 `renderer.text@1`。修改名称 / 说明 / fields 同样重新扫描即可，已保存的配置按新 fields 重新归一化。
+3. 开发模式下到「全部插件」点「重新扫描」：新插件在控制面板与桌面歌词中同时注册并激活，卡片、配置、选择路由和预览标签全部来自 manifest；不存在或停用时回退 `renderer.text@1`。修改名称 / 说明 / fields 同样重新扫描即可，已保存的配置按新 fields 重新归一化。
 4. 两个窗口都从同一目录启动（renderer 与 effect 默认运行在两个窗口，可用 `surfaces` 收窄），不再有 preview 可用、overlay 回退普通文字的漏注册。
 5. 浏览器和原生分别验证选择 / 停用 / 保存 / 回退 / 多窗口同步，不能只测一个 mount。将验证记录写入文档。时间驱动的弹入 / 弹出可参考 [PV renderer](pv-renderers.md)，真实逐字进度不能用视觉相位替代。
 

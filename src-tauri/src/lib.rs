@@ -7,7 +7,7 @@ mod shortcuts;
 use broker::{Broker, BrokerStatus};
 use serde::Serialize;
 use std::sync::Mutex;
-use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow};
+use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow, WebviewWindowBuilder};
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -74,16 +74,66 @@ async fn amll_status(
 
 #[tauri::command]
 fn overlay_status(app: AppHandle, state: State<'_, OverlayState>) -> Result<OverlayStatus, String> {
-    let overlay = app
-        .get_webview_window("overlay")
-        .ok_or("Overlay window is unavailable")?;
     let mut status = state.0.lock().map_err(|_| "Overlay state is unavailable")?;
-    status.visible = overlay.is_visible().map_err(|error| error.to_string())?;
+    status.visible = match app.get_webview_window("overlay") {
+        Some(overlay) => overlay.is_visible().map_err(|error| error.to_string())?,
+        None => false,
+    };
     Ok(status.clone())
 }
 
 #[tauri::command]
-fn overlay_update(
+fn overlay_exists(app: AppHandle, window: WebviewWindow) -> Result<bool, String> {
+    require_control(&window)?;
+    Ok(app.get_webview_window("overlay").is_some())
+}
+
+// Creation runs off the UI thread (including calls from global shortcuts).
+fn ensure_overlay(app: &AppHandle) -> Result<WebviewWindow, String> {
+    if let Some(window) = app.get_webview_window("overlay") {
+        return Ok(window);
+    }
+    let config = app
+        .config()
+        .app
+        .windows
+        .iter()
+        .find(|config| config.label == "overlay")
+        .ok_or("Overlay configuration is unavailable")?;
+    WebviewWindowBuilder::from_config(app, config)
+        .map_err(|error| error.to_string())?
+        .build()
+        .map_err(|error| error.to_string())
+}
+
+/// Inactive views may discard browser caches; playback and plugin IPC stay live.
+fn set_inactive_memory(window: &WebviewWindow, inactive: bool) {
+    #[cfg(windows)]
+    {
+        use webview2_com::Microsoft::Web::WebView2::Win32::{
+            ICoreWebView2_19, COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW,
+            COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_NORMAL,
+        };
+        use windows_core::Interface;
+        let _ = window.with_webview(move |webview| unsafe {
+            if let Ok(core) = webview.controller().CoreWebView2() {
+                if let Ok(core) = core.cast::<ICoreWebView2_19>() {
+                    let level = if inactive {
+                        COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW
+                    } else {
+                        COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_NORMAL
+                    };
+                    let _ = core.SetMemoryUsageTargetLevel(level);
+                }
+            }
+        });
+    }
+    #[cfg(not(windows))]
+    let _ = (window, inactive);
+}
+
+#[tauri::command]
+async fn overlay_update(
     app: AppHandle,
     window: WebviewWindow,
     state: State<'_, OverlayState>,
@@ -130,36 +180,48 @@ fn apply_overlay(
     click_through: Option<bool>,
     border_visible: Option<bool>,
 ) -> Result<OverlayStatus, String> {
-    let overlay = app
-        .get_webview_window("overlay")
-        .ok_or("Overlay window is unavailable")?;
-    let mut status = state.0.lock().map_err(|_| "Overlay state is unavailable")?;
-    if let Some(top) = always_on_top {
-        overlay
-            .set_always_on_top(top)
-            .map_err(|error| error.to_string())?;
-        status.always_on_top = top;
+    let mut result = state
+        .0
+        .lock()
+        .map_err(|_| "Overlay state is unavailable")?
+        .clone();
+    if let Some(value) = always_on_top {
+        result.always_on_top = value;
     }
-    if let Some(through) = click_through {
-        overlay
-            .set_ignore_cursor_events(through)
-            .map_err(|error| error.to_string())?;
-        status.click_through = through;
+    if let Some(value) = click_through {
+        result.click_through = value;
     }
-    if let Some(visible) = visible {
-        if visible {
+    if let Some(value) = border_visible {
+        result.border_visible = value;
+    }
+    if let Some(value) = visible {
+        result.visible = value;
+    }
+    // Keep flags usable before the first show, without allocating another renderer process.
+    let overlay = if result.visible {
+        Some(ensure_overlay(app)?)
+    } else {
+        app.get_webview_window("overlay")
+    };
+    if let Some(overlay) = overlay {
+        overlay
+            .set_always_on_top(result.always_on_top)
+            .map_err(|error| error.to_string())?;
+        overlay
+            .set_ignore_cursor_events(result.click_through)
+            .map_err(|error| error.to_string())?;
+        if result.visible {
+            set_inactive_memory(&overlay, false);
             overlay.show()
         } else {
             overlay.hide()
         }
         .map_err(|error| error.to_string())?;
-        status.visible = visible;
+        if !result.visible {
+            set_inactive_memory(&overlay, true);
+        }
     }
-    if let Some(border) = border_visible {
-        status.border_visible = border;
-    }
-    let result = status.clone();
-    drop(status);
+    *state.0.lock().map_err(|_| "Overlay state is unavailable")? = result.clone();
     app.emit("overlay-status", &result)
         .map_err(|error| error.to_string())?;
     Ok(result)
@@ -169,21 +231,20 @@ fn toggle_overlay(app: &AppHandle, action: &str) -> Result<OverlayStatus, String
     let state = app.state::<OverlayState>();
     let _operation = state.1.lock().map_err(|_| "Overlay state is unavailable")?;
     // Read actual visibility because the overlay can also be closed by the window manager.
-    let overlay = app
+    let visible = app
         .get_webview_window("overlay")
-        .ok_or("Overlay window is unavailable")?;
+        .map(|overlay| overlay.is_visible())
+        .transpose()
+        .map_err(|error| error.to_string())?
+        .unwrap_or(false);
     let mut status = state.0.lock().map_err(|_| "Overlay state is unavailable")?;
     let change = match action {
-        "visibility" => (
-            Some(!overlay.is_visible().map_err(|e| e.to_string())?),
-            None,
-            None,
-        ),
+        "visibility" => (Some(!visible), None, None),
         "clickthrough" => (None, Some(!status.click_through), None),
         "border" => (None, None, Some(!status.border_visible)),
         _ => return Err("未知桌面歌词操作".into()),
     };
-    status.visible = overlay.is_visible().map_err(|e| e.to_string())?;
+    status.visible = visible;
     drop(status);
     apply_overlay(app, &state, change.0, None, change.1, change.2)
 }
@@ -243,6 +304,7 @@ pub fn run() {
             amll_status,
             overlay_update,
             overlay_status,
+            overlay_exists,
             overlay_fit,
             shortcuts::shortcuts_status,
             shortcuts::shortcut_set,
@@ -252,9 +314,18 @@ pub fn run() {
             audio::amll_audio_ack,
             audio::amll_audio_select,
             plugin_source::plugin_source,
-            plugin_source::plugin_catalog
+            plugin_source::plugin_catalog,
+            plugin_source::plugin_install,
+            plugin_source::plugin_uninstall,
+            plugin_source::plugin_export_save,
+            plugin_source::plugins_folder_open
         ])
         .on_window_event(|window, event| {
+            if window.label() == "main" && matches!(event, tauri::WindowEvent::Resized(_)) {
+                if let Some(webview) = window.app_handle().get_webview_window("main") {
+                    set_inactive_memory(&webview, window.is_minimized().unwrap_or(false));
+                }
+            }
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 match window.label() {
                     "main" => window.app_handle().exit(0),

@@ -3,11 +3,12 @@ import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import { mkdir, writeFile, access } from 'node:fs/promises';
 import path from 'node:path';
-import { go } from './lib/nav.mjs';
+import { go, showNativeOverlay } from './lib/nav.mjs';
 
 const output = path.resolve(process.env.LYRSCAPE_QA_DIR ?? 'qa');
 await mkdir(output, { recursive: true });
 const browser = await chromium.connectOverCDP(process.env.LYRSCAPE_CDP ?? 'http://127.0.0.1:9229');
+await showNativeOverlay(browser.contexts()[0]);
 const pages = browser.contexts().flatMap(c => c.pages());
 const main = pages.find(p => !p.url().includes('surface=overlay')), overlay = pages.find(p => p.url().includes('surface=overlay'));
 if (!main || !overlay) throw Error('Both isolated native windows are required');

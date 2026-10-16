@@ -1,5 +1,5 @@
 import { chromium, expect } from '@playwright/test';
-import { go } from './lib/nav.mjs';
+import { go, openPlugin } from './lib/nav.mjs';
 const browser = await chromium.launch({ channel: 'msedge', headless: true });
 try {
   const context = await browser.newContext({ viewport: { width: 1280, height: 950 } });
@@ -15,7 +15,7 @@ try {
   };
   const long = 'LongWord'.repeat(28);
   for (const renderer of ['official.renderer.text', 'official.renderer.aurora']) {
-    const use = main.locator(`[data-plugin-id="${renderer}"] [data-plugin-use]`);
+    const use = (await openPlugin(main, `${renderer}`)).locator('[data-plugin-use]');
     await go(main, 'plugins');
     if (await use.isEnabled()) await use.click();
     await go(main, 'lyrics');

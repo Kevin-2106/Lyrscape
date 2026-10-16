@@ -1,7 +1,7 @@
 import { chromium, expect } from '@playwright/test';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { go } from './lib/nav.mjs';
+import { go, openPlugin } from './lib/nav.mjs';
 
 // Native-only, isolated instance only (fixture port 11445): streams a synthetic
 // 120 BPM kick as AMLL V2 PCM in real time and checks that the beat detector in
@@ -47,7 +47,7 @@ try {
   };
   const overlay = await overlayPage();
   await go(main, 'plugins');
-  const use = main.locator('[data-plugin-id="official.renderer.pv-pop"] [data-plugin-use]');
+  const use = (await openPlugin(main, 'official.renderer.pv-pop')).locator('[data-plugin-use]');
   if (await use.isEnabled()) await use.click();
   await go(main, 'lyrics');
   await main.locator('[data-adapter="amll"]').click();

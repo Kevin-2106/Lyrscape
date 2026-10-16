@@ -1,5 +1,5 @@
 import { chromium, expect } from '@playwright/test';
-import { go } from './lib/nav.mjs';
+import { go, openPlugin } from './lib/nav.mjs';
 
 // Plugin list hot reload (development source). The catalog endpoints are intercepted
 // so the check adds, re-describes and removes a fixture renderer without editing src/.
@@ -36,7 +36,8 @@ await context.route('**/__lyrscape/plugin-catalog', async route => {
   await route.fulfill({ response, json: body });
 });
 await context.route(`**/__lyrscape/plugin-source/${FIXTURE}`, route => route.fulfill({ json: fixtureBundle }));
-const card = () => main.locator(`[data-plugin-id="${FIXTURE}"]`);
+const card = () => main.locator(`[data-plugin-detail][data-plugin-id="${FIXTURE}"]`);
+const row = () => main.locator(`[data-plugin-row="${FIXTURE}"]`);
 const rescan = async expected => {
   await go(main, 'plugins');
   await main.locator('[data-plugin-rescan]').click();
@@ -47,7 +48,7 @@ try {
   await main.goto(base); await overlay.goto(`${base}/?surface=overlay`);
   await go(main, 'plugins');
   await expect(main.locator('[data-plugin-rescan]')).toBeVisible();
-  await expect(card()).toHaveCount(0);
+  await expect(row()).toHaveCount(0);
 
   console.log('Rescan: an unchanged catalog reports no change');
   await rescan('插件列表没有变化');
@@ -56,15 +57,15 @@ try {
   await main.evaluate(() => { window.__catalogSentinel = 'same-page'; });
   listing = 'with-fixture';
   await rescan(`新增 ${FIXTURE}`);
+  await openPlugin(main, FIXTURE);
   await expect(card()).toHaveAttribute('data-plugin-origin', 'source');
   await expect(card().locator('.plugin-origin')).toHaveText('源码新增');
   await expect(card().locator('h3')).toHaveText(fixtureManifest.name);
   await card().locator('[data-plugin-use]').click();
-  await card().locator('details').evaluate(element => { element.open = true; });
   await card().locator('[data-plugin-config="label"]').selectOption('two');
   await go(main, 'lyrics');
   await expect(main.locator('#lyrics-preview [data-catalog-fixture]')).toHaveText('fixture two');
-  await expect(main.locator('[data-renderer-label]')).toHaveText(`${fixtureManifest.name}渲染器`);
+  await expect(main.locator('[data-renderer-label]')).toHaveText(fixtureManifest.name);
   await expect(overlay.locator('[data-catalog-fixture]')).toHaveText('fixture two');
   await expect(overlay.locator('[data-catalog-fixture]')).toHaveCSS('color', 'rgb(1, 2, 3)');
   expect(await main.evaluate(() => window.__catalogSentinel), 'no page reload').toBe('same-page');
@@ -76,12 +77,12 @@ try {
   console.log('Rescan: metadata of an existing plugin updates in place');
   auroraDescription = '目录扫描更新后的说明。';
   await rescan('更新说明 / 配置 official.renderer.aurora');
-  await expect(main.locator('[data-plugin-id="official.renderer.aurora"] .plugin-description')).toHaveText(auroraDescription);
+  await expect((await openPlugin(main, 'official.renderer.aurora')).locator('.plugin-description')).toHaveText(auroraDescription);
 
   console.log('Rescan: removing it falls back to plain text in both windows');
   listing = 'builtin'; auroraDescription = undefined;
   await rescan(`移除 ${FIXTURE}`);
-  await expect(card()).toHaveCount(0);
+  await expect(row()).toHaveCount(0);
   await go(main, 'lyrics');
   await expect(main.locator('#lyrics-preview [data-catalog-fixture]')).toHaveCount(0);
   await expect(overlay.locator('[data-catalog-fixture]')).toHaveCount(0);
@@ -91,11 +92,11 @@ try {
   listing = 'with-fixture';
   await rescan(`新增 ${FIXTURE}`);
   await main.reload(); await go(main, 'plugins');
-  await expect(card()).toHaveCount(0);
+  await expect(row()).toHaveCount(0);
   // The restarted control window resets the overlay to the built-in list.
   await expect(overlay.locator('[data-catalog-fixture]')).toHaveCount(0);
   await rescan(`新增 ${FIXTURE}`);
-  await card().locator('details').evaluate(element => { element.open = true; });
+  await openPlugin(main, FIXTURE);
   await expect(card().locator('[data-plugin-config="label"]')).toHaveValue('two');
   listing = 'builtin'; await rescan(`移除 ${FIXTURE}`);
 

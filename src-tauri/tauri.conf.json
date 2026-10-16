@@ -23,6 +23,7 @@
       },
       {
         "label": "overlay",
+        "create": false,
         "title": "Lyrscape Desktop Lyrics",
         "url": "index.html?surface=overlay",
         "width": 1100,

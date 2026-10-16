@@ -1,14 +1,14 @@
 import { chromium, expect } from '@playwright/test';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
-import { go } from './lib/nav.mjs';
+import { go, openPlugin, showNativeOverlay } from './lib/nav.mjs';
 
 const output = path.resolve(process.env.LYRSCAPE_QA_DIR ?? 'qa'); await mkdir(output, { recursive: true });
 const native = Boolean(process.env.LYRSCAPE_CDP);
 const browser = native ? await chromium.connectOverCDP(process.env.LYRSCAPE_CDP) : await chromium.launch({ channel: 'msedge', headless: true });
 const context = native ? browser.contexts()[0] : await browser.newContext({ viewport: { width: 1280, height: 950 } });
 const main = native ? context.pages().find(p => !p.url().includes('surface=overlay')) : await context.newPage();
-let overlay = native ? context.pages().find(p => p.url().includes('surface=overlay')) : await context.newPage();
+let overlay = native ? await showNativeOverlay(context) : await context.newPage();
 const sourcePath = path.resolve(native ? process.env.LYRSCAPE_LOCAL_PLUGIN ?? 'qa/manual-reload-runtime/plugins/official.renderer.aurora.mjs' : 'src/plugins/aurora.ts');
 const cssPath = path.resolve(native ? sourcePath.replace(/\.mjs$/, '.css') : 'src/plugins/aurora.css');
 const original = await readFile(sourcePath, 'utf8'), originalCss = await readFile(cssPath, 'utf8');
@@ -16,17 +16,16 @@ let lastSource = original, lastCss = originalCss;
 let fixture;
 const edit = async (source, css = lastCss) => { lastSource = source; lastCss = css; await writeFile(sourcePath, source); await writeFile(cssPath, css); };
 const card = () => main.locator('[data-plugin-id="official.renderer.aurora"]');
-const reload = async () => { await go(main, 'plugins'); await card().locator('[data-plugin-reload]').click(); };
+const reload = async () => { await openPlugin(main, 'official.renderer.aurora'); await card().locator('[data-plugin-reload]').click(); };
 const proof = async (page, value) => { if (page === main) await go(main, 'lyrics'); await expect(page.locator('[data-reload-proof]').first()).toHaveAttribute('data-reload-proof', value); };
 const browserErrors = [];
 for (const page of [main, overlay]) { page.on('pageerror', e => browserErrors.push(e.message)); page.on('console', message => { if (message.type() === 'error') browserErrors.push(message.text()); }); }
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 try {
-  if (!native) { await main.goto('http://127.0.0.1:1420'); await overlay.goto('http://127.0.0.1:1420/?surface=overlay'); }
+  if (!native) { const base = process.env.LYRSCAPE_URL ?? 'http://127.0.0.1:1420'; await main.goto(base); await overlay.goto(`${base}/?surface=overlay`); }
   else { await main.reload(); await overlay.reload(); }
-  await go(main, 'plugins');
+  await openPlugin(main, 'official.renderer.aurora');
   const use = card().locator('[data-plugin-use]'); if (!await use.isDisabled()) await use.click();
-  await card().locator('details').evaluate(element => { element.open = true; });
   await card().locator('[data-plugin-config="duration"]').fill('1200');
   await card().locator('[data-plugin-config="duration"]').dispatchEvent('change');
   await card().locator('[data-plugin-reload-source]').selectOption(native ? 'local' : 'source');
@@ -83,8 +82,7 @@ try {
     await expect.poll(async () => (await invoke('amll_status')).port).toBe(11445);
     await connect();
     await expect(main.locator('[data-track-title]')).toHaveText('Manual reload fixture');
-    await go(main, 'plugins');
-    const amll = main.locator('[data-plugin-id="official.adapter.amll"]');
+    const amll = await openPlugin(main, 'official.adapter.amll');
     await amll.locator('[data-plugin-reload-source]').selectOption('local'); await amll.locator('[data-plugin-reload]').click();
     await expect.poll(() => fixture.readyState).toBe(WebSocket.CLOSED);
     await expect.poll(async () => (await invoke('amll_status')).running).toBe(true);
@@ -93,7 +91,7 @@ try {
     await invoke('amll_stop');
     await main.locator('[data-adapter="demo"]').click();
     for (const id of ['official.renderer.pv-pop', 'official.renderer.pv-letter', 'official.renderer.pv-elegy']) {
-      await go(main, 'plugins'); const pv = main.locator(`[data-plugin-id="${id}"]`);
+      const pv = await openPlugin(main, id);
       await pv.locator('[data-plugin-use]').click(); await pv.locator('[data-plugin-reload-source]').selectOption('local');
       await pv.locator('[data-plugin-reload]').click(); await expect(pv.locator('[data-plugin-reload]')).toHaveAttribute('title', /已成功热重载/);
       await expect(pv.locator('.plugin-error')).toBeHidden(); await go(main, 'lyrics');

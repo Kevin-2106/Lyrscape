@@ -27,13 +27,15 @@ try {
     if (entrance) {
       if (!['comet', 'orbit', 'prism'].includes(entrance)) throw Error('Unknown entrance preset');
       await main.evaluate(value => {
+        // Selecting a row in 全部插件 builds its detail pane synchronously.
+        document.querySelector('[data-plugin-group="all"]').click(); document.querySelector('[data-plugin-row="official.renderer.aurora"]').click();
         const input = document.querySelector('[data-plugin-id="official.renderer.aurora"] [data-plugin-config="entrance"]');
         input.value = value; input.dispatchEvent(new Event('change', { bubbles: true }));
       }, entrance);
     }
-    await main.evaluate(() => { document.querySelector('[data-restart]').click(); document.querySelector('[data-plugin-id="official.renderer.text"] [data-plugin-use]').click(); });
+    await main.evaluate(() => { document.querySelector('[data-restart]').click(); document.querySelector('[data-plugin-group="all"]').click(); document.querySelector('[data-plugin-row="official.renderer.text"]').click(); document.querySelector('[data-plugin-id="official.renderer.text"] [data-plugin-use]').click(); });
     await main.waitForTimeout(150);
-    await main.evaluate(() => document.querySelector('[data-plugin-id="official.renderer.aurora"] [data-plugin-use]').click());
+    await main.evaluate(() => { document.querySelector('[data-plugin-row="official.renderer.aurora"]').click(); document.querySelector('[data-plugin-id="official.renderer.aurora"] [data-plugin-use]').click(); });
   }
   console.log(`Applied diagnostic variant: ${variant}`);
 } finally { await browser.close(); }

@@ -1,5 +1,5 @@
 import { chromium, expect } from '@playwright/test';
-import { go } from './lib/nav.mjs';
+import { go, openPlugin, showNativeOverlay } from './lib/nav.mjs';
 import { mkdir } from 'node:fs/promises';
 const native = Boolean(process.env.LYRSCAPE_CDP);
 const browser = native ? await chromium.connectOverCDP(process.env.LYRSCAPE_CDP) : await chromium.launch({ channel: 'msedge', headless: true });
@@ -8,7 +8,7 @@ try {
   const context = native ? browser.contexts()[0] : await browser.newContext({ viewport: { width: 1280, height: 950 } });
   const main = native ? context.pages().find(p => !p.url().includes('surface=overlay')) : await context.newPage();
   if (!native) await main.goto(process.env.LYRSCAPE_URL ?? 'http://127.0.0.1:1420');
-  const use = main.locator('[data-plugin-id="official.renderer.aurora"] [data-plugin-use]');
+  const use = (await openPlugin(main, 'official.renderer.aurora')).locator('[data-plugin-use]');
   await go(main, 'plugins');
   if (await use.isEnabled()) await use.click();
   await go(main, 'lyrics');
@@ -27,7 +27,7 @@ try {
     document.querySelector('[data-lyrics]').value = 'MMMM'; document.querySelector('[data-import]').click();
   });
   await configure('motion', false); await configure('sparks', false); await configure('glow', false);
-  const overlay = native ? context.pages().find(p => p.url().includes('surface=overlay')) : await context.newPage();
+  const overlay = native ? await showNativeOverlay(context) : await context.newPage();
   if (!native) await overlay.goto('http://127.0.0.1:1420/?surface=overlay');
   await expect(overlay.locator('.lyric-current')).toHaveText('MMMM');
   for (const [name, page] of [['preview', main], ['overlay', overlay]]) {

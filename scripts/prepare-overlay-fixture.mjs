@@ -1,15 +1,17 @@
+import { openPlugin, showNativeOverlay } from './lib/nav.mjs';
 import { chromium, expect } from '@playwright/test';
 const browser = await chromium.connectOverCDP(process.env.LYRSCAPE_CDP ?? 'http://127.0.0.1:9228');
 const pvStyle = process.argv.find(arg => arg.startsWith('--pv='))?.slice(5);
 if (pvStyle && !['pop', 'letter', 'elegy'].includes(pvStyle)) throw Error('Unknown PV style');
 try {
+  await showNativeOverlay(browser.contexts()[0]);
   const pages = browser.contexts().flatMap(c => c.pages());
   const main = pages.find(p => !p.url().includes('surface=overlay'));
   const overlay = pages.find(p => p.url().includes('surface=overlay'));
   if (!main || !overlay) throw Error('Expected isolated fixture windows');
   await main.reload();
   const rendererId = pvStyle ? `official.renderer.pv-${pvStyle}` : 'official.renderer.aurora';
-  const useRenderer = main.locator(`[data-plugin-id="${rendererId}"] [data-plugin-use]`);
+  const useRenderer = (await openPlugin(main, `${rendererId}`)).locator('[data-plugin-use]');
   if (await useRenderer.isEnabled()) await useRenderer.click();
   await main.evaluate(({ lineOnly, pvStyle, rendererId }) => {
     const set = (selector, value, type = 'input') => {

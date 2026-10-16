@@ -29,7 +29,7 @@ npm run dev
 | `src/plugins/pv*` | 三个独立文字 PV renderer，共用行边界、绝对时间相位和字符预算 |
 | `src/plugins/amll.ts` / `parsers.ts` / `timeline.ts` | adapter / 格式解析 / 时间采样策略 |
 | `src/plugins/surface.ts` | overlay 挂载、状态接收、拖动、左右 resize 把手与高度适配 |
-| `src/ui/` | 控制窗口：应用外壳 `shell.ts`（侧栏、哈希路由、常驻播放栏、Toast、快捷键）、`pages/`（歌词 / 文字样式 / 桌面歌词 / 插件 / 关于）、`components/`、`kit/`（DOM、字段、Toast、对话框）、`styles/` |
+| `src/ui/` | 控制窗口：应用外壳 `shell.ts`（侧栏、哈希路由、常驻播放栏、Toast、快捷键）、`pages/`（播放›歌词 / 插件›渲染器、特效、全部插件 / 应用›设置）、`components/`、`kit/`（DOM、字段、Toast、对话框）、`styles/` |
 | `src/platform.ts` | 浏览器 / Tauri 的窄能力封装 |
 | `src-tauri/src/` | WebSocket broker / codec、窗口和来源检查 |
 | `src-tauri/capabilities/` | 各窗口的原生命令权限；overlay 仅开放所需能力 |
@@ -87,7 +87,8 @@ node scripts/prepare-overlay-fixture.mjs
 ## 控制窗口 UI 结构
 
 - `ui/context.ts`：`UiContext`（状态与命令的唯一入口）、`PageDefinition`、`UiServices`。页面不直接碰 store 或 host。
-- 新增页面：在 `ui/pages/` 写一个 `PageDefinition`，加入 `ui/pages/index.ts`；顺序即侧栏顺序和 `Ctrl+N` 映射。
+- 新增页面：在 `ui/pages/` 写一个 `PageDefinition`（`group` 是侧栏一级菜单），加入 `ui/pages/index.ts`；顺序即侧栏顺序和 `Ctrl+N` 映射。某类插件需要日常交互时给它单开一个页面，否则留在「全部插件」。`navigate(id, target)` 可让页面显示某个部分（检查器页签、插件、分组、导入）。
 - 页面常驻 DOM、仅隐藏；`render(state)` 只对当前页调用，激活时先补一次渲染。渲染器预览放在 `activate()` / `deactivate()` 中挂载与释放，所以隐藏页不占资源，也意味着自动化脚本要先切到对应页面再断言预览（见 `scripts/lib/nav.mjs`）。
-- 路由是 `#/页面id`，并在本地记住上次页面；快捷键见 `ui/shortcuts.ts` 与关于页。
+- 路由是 `#/页面id`，并在本地记住上次页面；旧页面名（lyrics 之外的 style / overlay / about）会映射到新页面。快捷键见 `ui/shortcuts.ts` 与设置页。
+- 「全部插件」把整个页面作为插件文件的拖放区（`.lyrx` / `.mjs`），与歌词导入卡片的拖放互不冲突。
 - 控制窗口关闭了 Tauri 的原生文件拖放（`dragDropEnabled: false`），歌词文件拖入导入卡片走网页 DnD。

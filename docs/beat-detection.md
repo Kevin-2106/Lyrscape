@@ -1,6 +1,6 @@
 # 节拍检测
 
-2026-10-13。`official.audio.beat`（插件页「特效」分类）从 `audio.pcm@1` 实时估计速度与鼓点相位，提供 `audio.beat@1`；三个 PV renderer 与 Aurora 跟随节拍。默认启用；没有 PCM、暂停或停用插件时不产生任何效果，歌词画面与原来完全一致。
+2026-10-13。`official.audio.beat`（「插件 › 特效」页）从 `audio.pcm@1` 实时估计速度与鼓点相位，提供 `audio.beat@1`；三个 PV renderer 与 Aurora 跟随节拍。默认启用；没有 PCM、暂停或停用插件时不产生任何效果，歌词画面与原来完全一致。
 
 ## 用户可见行为
 

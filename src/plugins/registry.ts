@@ -55,6 +55,17 @@ export function validateManifest(input: unknown, expectedId: string): PluginMani
   const manifest: PluginManifest = { id: expectedId, name: text(value.name, 'name', 60)!, description: text(value.description, 'description', 300)!, category };
   const version = text(value.version, 'version', 20, true);
   if (version) manifest.version = version;
+  const author = text(value.author, 'author', 60, true), license = text(value.license, 'license', 40, true);
+  if (author) manifest.author = author;
+  if (license) manifest.license = license;
+  if (value.homepage !== undefined) {
+    if (typeof value.homepage !== 'string' || value.homepage.length > 200 || !/^https:\/\/[^\s]+$/.test(value.homepage)) throw Error('manifest.homepage 必须是 https:// 链接');
+    manifest.homepage = value.homepage;
+  }
+  if (value.tags !== undefined) {
+    if (!Array.isArray(value.tags) || value.tags.length > 8 || value.tags.some(tag => typeof tag !== 'string' || !tag.trim() || tag.length > 16)) throw Error('manifest.tags 最多 8 个、每个 1–16 字');
+    manifest.tags = [...new Set(value.tags as string[])];
+  }
   if (category === 'renderer') {
     if (typeof value.rendererService !== 'string' || !SERVICE.test(value.rendererService)) throw Error('渲染器 manifest 需要 rendererService，例如 renderer.my-style@1');
     manifest.rendererService = value.rendererService;
@@ -80,10 +91,12 @@ export const infoOf = (manifest: PluginManifest, essential = false): PluginInfo 
   id: manifest.id, name: manifest.name, description: manifest.description, category: manifest.category,
   version: manifest.version ?? '0.1.0', ...(essential ? { essential } : {}),
   ...(manifest.rendererService ? { rendererService: manifest.rendererService } : {}), ...(manifest.fields ? { fields: manifest.fields } : {}),
+  ...Object.fromEntries((['surfaces', 'author', 'homepage', 'license', 'tags'] as const).filter(key => manifest[key] !== undefined).map(key => [key, manifest[key]])),
 });
 
 /** Comparable metadata in a fixed shape (property order and implied defaults ignored), so a rescan only reports real changes. */
 export const metadataKey = (info: PluginInfo) => JSON.stringify([info.name, info.description, info.category, info.version, info.rendererService ?? '',
+  info.surfaces ?? [], info.author ?? '', info.homepage ?? '', info.license ?? '', info.tags ?? [],
   (info.fields ?? []).map(f => [f.key, f.label, f.description ?? '', f.type, f.default, f.min ?? null, f.max ?? null,
     f.type === 'number' ? f.step ?? 1 : null, (f.options ?? []).map(o => [o.value, o.label])])]);
 

@@ -1,7 +1,7 @@
 import { chromium, expect } from '@playwright/test';
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
-import { go } from './lib/nav.mjs';
+import { go, openPlugin } from './lib/nav.mjs';
 
 // Browser smoke for the Apple Music-style list renderer (scene mode): scroll
 // springs settle, seek and pause are exact, motion off snaps, interlude dots
@@ -18,7 +18,6 @@ const seek = value => page.locator('[data-seek]').evaluate((element, value) => {
   return new Promise(resolve => { setTimeout(resolve, 200); requestAnimationFrame(() => requestAnimationFrame(resolve)); });
 }, value);
 const importLyrics = async text => {
-  await page.locator('details.import-card').evaluate(element => { element.open = true; });
   await page.locator('[data-lyrics]').fill(text); await page.locator('[data-import]').click();
 };
 const configure = (key, value) => page.locator(`[data-plugin-id="official.renderer.amll"] [data-plugin-config="${key}"]`).evaluate((element, value) => {
@@ -47,7 +46,7 @@ const lyrics = '[00:00.00]第一行 一緒に歩こう\n[00:02.00]第二行 夜�
 try {
   await page.goto(base);
   await go(page, 'plugins');
-  await page.locator('[data-plugin-id="official.renderer.amll"] [data-plugin-use]').click();
+  await (await openPlugin(page, 'official.renderer.amll')).locator('[data-plugin-use]').click();
   await go(page, 'lyrics');
   await expect(page.locator('#lyrics-preview')).toHaveAttribute('data-pv-style', 'amll');
   await importLyrics(lyrics);
@@ -74,8 +73,7 @@ try {
   expect(dotsLate.signature, 'dots fill as the gap progresses').not.toBe(dotsEarly.signature);
   await page.locator('#lyrics-preview').screenshot({ path: path.join(output, 'interlude.png') });
 
-  await go(page, 'plugins');
-  await page.locator('[data-plugin-id="official.renderer.amll"] details').evaluate(element => { element.open = true; });
+  await openPlugin(page, 'official.renderer.amll');
   await configure('motion', false);
   await go(page, 'lyrics');
   await seek(2030); const snapped = await stable(page);

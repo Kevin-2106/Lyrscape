@@ -15,7 +15,6 @@ const input = async (selector, value) => page.locator(selector).evaluate((elemen
 try {
   await page.goto(process.env.LYRSCAPE_URL ?? 'http://127.0.0.1:1420');
   await expect(page.locator('.word-base').first()).toHaveText('让');
-  await page.locator('details.import-card').evaluate(element => { element.open = true; });
   await page.locator('[data-lyrics]').fill('普通文字，自己的风景。');
   await page.locator('[data-import]').click();
   await expect(page.locator('.lyric-current')).toHaveText('普通文字，自己的风景。');
@@ -37,7 +36,6 @@ try {
   await page.screenshot({ path: path.join(output, 'lyrscape-settings.png'), fullPage: true });
 
   await go(page, 'lyrics');
-  await page.locator('details.import-card').evaluate(element => { element.open = true; });
   await page.locator('[data-lyrics]').fill('[00:00.00]First line\n[00:04.00]Next line');
   await page.locator('[data-import]').click();
   await input('[data-seek]', 5000);
@@ -49,7 +47,7 @@ try {
   await expect.poll(() => page.locator('.word-fill').first().evaluate(element => element.style.clipPath), { message: 'Word progress did not render' }).toContain('50%');
 
   const overlay = await context.newPage();
-  await overlay.goto('http://127.0.0.1:1420/?surface=overlay');
+  await overlay.goto(`${process.env.LYRSCAPE_URL ?? 'http://127.0.0.1:1420'}/?surface=overlay`);
   await expect(overlay.locator('#app')).toContainText('Hello');
   await expect(overlay.locator('html')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   await expect(overlay.locator('.lyric-surface')).toHaveCSS('font-size', '52px');

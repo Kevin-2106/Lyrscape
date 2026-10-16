@@ -37,7 +37,7 @@ export default defineConfig({
     // woff2, so drop the fallbacks instead of bundling every subset twice.
     name: 'lyrscape-woff2-only', enforce: 'pre',
     transform(code, id) {
-      if (!/[\\/](@fontsource|lxgw-wenkai-webfont)[\\/].+\.css$/.test(id)) return;
+      if (!/[\\/](@fontsource|lxgw-wenkai-webfont)[\\/].+\.css$/.test(id.split('?')[0])) return;
       return code.replace(/,\s*url\([^)]+\.woff\)\s*format\('woff'\)/g, '');
     },
   }],

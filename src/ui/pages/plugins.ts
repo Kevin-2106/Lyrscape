@@ -4,11 +4,16 @@ import { html } from '../kit/dom';
 import { mountPluginManager } from '../plugin-manager';
 
 export const pluginsPage: PageDefinition = {
-  id: 'plugins', title: '插件', subtitle: '自由组合歌词的来源与表现，设置自动保存', icon: icons.plugins,
-  mount(root, { ctx }) {
-    const panel = html('<section class="plugin-panel" aria-label="插件管理与配置" data-plugin-manager></section>');
+  id: 'plugins', group: '插件', title: '全部插件', subtitle: '按职责分类管理插件：启停、配置、导入导出与热重载', icon: icons.plugins,
+  mount(root, { ctx, notify, navigate, confirm }) {
+    const panel = html('<div class="manager-host" aria-label="插件管理与配置" data-plugin-manager></div>');
     root.append(panel);
-    const dispose = mountPluginManager(panel, ctx.pluginManagement, ctx.getState, listener => ctx.subscribe(() => listener()));
-    return { render() { /* the manager subscribes to state and management itself */ }, dispose() { dispose(); root.replaceChildren(); } };
+    const manager = mountPluginManager(panel, ctx.pluginManagement, ctx.getState, listener => ctx.subscribe(() => listener()), { notify, navigate, confirm });
+    return {
+      render() { /* the manager subscribes to state and management itself */ },
+      reveal: manager.reveal,
+      commands: { search: manager.focusSearch },
+      dispose() { manager(); root.replaceChildren(); },
+    };
   },
 };

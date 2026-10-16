@@ -1,7 +1,7 @@
 // Samples original lyrics in an isolated browser. The resulting frames can be
 // encoded as a GIF; this is a timeline demonstration, not an OS capture.
 import { chromium, expect } from '@playwright/test';
-import { go } from './lib/nav.mjs';
+import { go, openPlugin } from './lib/nav.mjs';
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 const output = path.resolve('qa/pv-demo'); await mkdir(output, { recursive: true });
@@ -22,7 +22,7 @@ try {
     ['elegy', '03 / PV · 水底挽歌', '#d2b7ff', '#a7e4ff'],
   ]) {
     await go(main, 'plugins');
-    await main.locator(`[data-plugin-id="official.renderer.pv-${style}"] [data-plugin-use]`).click();
+    await (await openPlugin(main, `official.renderer.pv-${style}`)).locator('[data-plugin-use]').click();
     await main.evaluate(({ color, end }) => {
       const set = (key, value) => { const input = document.querySelector(`[data-setting="${key}"]`); if (input.type === 'checkbox') input.checked = value; else input.value = String(value); input.dispatchEvent(new Event('input', { bubbles: true })); };
       for (const [key, value] of Object.entries({ fontSize: 62, fontWeight: 800, gradientEnabled: true, gradientStart: color, gradientEnd: end, backgroundOpacity: 0, showTranslation: false, showNextLine: false })) set(key, value);

@@ -30,7 +30,7 @@ export default (store) => item.create(store);`;
     plugins: [{ name: 'use-host-fonts', setup(build) {
       // Fonts are already available in the host. Keep local plugin bundles self-contained.
       build.onResolve({ filter: /^(@fontsource\/|lxgw-wenkai-webfont\/)/ }, args => ({ path: args.path, namespace: 'host-font' }));
-      build.onLoad({ filter: /.*/, namespace: 'host-font' }, () => ({ contents: '', loader: 'js' }));
+      build.onLoad({ filter: /.*/, namespace: 'host-font' }, () => ({ contents: 'export default "";', loader: 'js' }));
     } }],
   });
   const javascript = result.outputFiles.find(f => f.path.endsWith('.mjs'))?.text;

@@ -160,9 +160,12 @@ pub fn handle(app: &AppHandle, shortcut: &Shortcut, event: ShortcutState) {
             .map(|b| b.status.action.clone())
     };
     if let Some(action) = action {
-        if let Err(error) = super::toggle_overlay(app, &action) {
-            let _ = app.emit("shortcut-error", error);
-        }
+        let app = app.clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            if let Err(error) = super::toggle_overlay(&app, &action) {
+                let _ = app.emit("shortcut-error", error);
+            }
+        });
     }
 }
 

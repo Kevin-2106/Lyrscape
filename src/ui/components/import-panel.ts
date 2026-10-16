@@ -11,10 +11,10 @@ const MAX_FILE_BYTES = 2 * 1024 * 1024;
 
 /** Lyrics import: paste, open a file, or drop one onto the card. */
 export function mountImportPanel(host: HTMLElement, { ctx, perform, notify }: UiServices): { openFilePicker(): void; dispose(): void } {
-  const card = html<HTMLDetailsElement>(`<details class="card import-card">
-    <summary><span><strong>导入歌词</strong><span class="subtle">LRC / TTML / 纯文本，也可拖入文件</span></span><span class="disclosure-arrow" aria-hidden="true">⌄</span></summary>
+  const card = html(`<section class="card import-card">
+    <header class="card-title"><h2>导入歌词</h2><span class="subtle">LRC / TTML / 纯文本 · 可拖入文件</span></header>
     <div class="import-content"><label class="sr-only" for="lyrics-input">歌词内容</label><textarea id="lyrics-input" data-lyrics spellcheck="false" placeholder="粘贴歌词，例如：&#10;[00:00.00]第一行歌词&#10;[00:04.00]第二行歌词"></textarea><div class="import-actions"><button class="button-primary" data-import>应用歌词</button><button class="button-secondary" data-open-file>打开文件</button><button class="button-link" data-example>填入示例</button><input type="file" data-file accept=".lrc,.ttml,.xml,.txt,text/plain,application/xml" hidden></div><p class="helper">支持逐行 LRC、逐字 LRC 与 TTML。导入后切换到本地演示；纯文本按行展示，带时间的歌词跟随播放。</p></div>
-  </details>`);
+  </section>`);
   host.append(card);
   const input = q<HTMLTextAreaElement>(card, '[data-lyrics]');
   const file = q<HTMLInputElement>(card, '[data-file]');
@@ -28,7 +28,6 @@ export function mountImportPanel(host: HTMLElement, { ctx, perform, notify }: Ui
       if (picked.size > MAX_FILE_BYTES) throw new Error('歌词文件超过 2 MB，请选择较小的文本文件。');
       input.value = await picked.text();
       importedName = picked.name;
-      card.open = true;
       notify(`已读取 ${picked.name}，点击“应用歌词”开始预览。`);
     } catch (error) { notify(error instanceof Error ? error.message : String(error), 'error'); }
   }
@@ -52,5 +51,5 @@ export function mountImportPanel(host: HTMLElement, { ctx, perform, notify }: Ui
     void load(event.dataTransfer?.files[0]);
   }, { signal });
 
-  return { openFilePicker() { card.open = true; file.click(); }, dispose() { controller.abort(); card.remove(); } };
+  return { openFilePicker() { file.click(); }, dispose() { controller.abort(); card.remove(); } };
 }

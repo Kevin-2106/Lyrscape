@@ -16,7 +16,8 @@ import type { UiContext } from './ui/context';
 import pkg from '../package.json';
 import { desktop, onEvent, sendOverlayEvent } from './platform';
 import { catalog } from './plugins/catalog';
-import { AMLL_ADAPTER, createPluginManagement, normalizePreferences, rendererSelectionPlugin } from './plugins/management';
+import { AMLL_ADAPTER, createPluginManagement, normalizePreferences, rendererSelectionPlugin, type PluginReloader } from './plugins/management';
+import { sdkPlugin } from './plugins/sdk';
 import { infoOf, PluginRegistry, surfacesOf, type RegistryEntry } from './plugins/registry';
 import './ui/app.css';
 
@@ -42,7 +43,7 @@ async function boot() {
   if (isOverlay) {
     const plugins = builtin('overlay');
     for (const entry of plugins) registry.set(entry);
-    await host.start([pcmAudioPlugin, manualReloadPlugin(host, store, true, registry), themePlugin, timelinePlugin, rendererPlugin, ...plugins.map(entry => entry.plugin), rendererSelectionPlugin(host, registry), overlaySurfacePlugin(root, store, true)]);
+    await host.start([pcmAudioPlugin, sdkPlugin, manualReloadPlugin(host, store, true, registry), themePlugin, timelinePlugin, rendererPlugin, ...plugins.map(entry => entry.plugin), rendererSelectionPlugin(host, registry), overlaySurfacePlugin(root, store, true)]);
     await host.service<ManualReload>('plugins.reload@1').ready();
     window.addEventListener('beforeunload', () => host.stop());
     return;
@@ -129,6 +130,7 @@ async function boot() {
     entry(demoPlugin, { name: '本地演示', description: '原创演示与本地歌词播放，不需要外部播放器。', category: 'playback-adapter', essential: true }),
     ...take(AMLL_ADAPTER),
     entry(parserPlugin, { name: '基础歌词解析', description: 'LRC、增强 LRC、常用 TTML 与纯文本。', category: 'lyric-parser', essential: true }),
+    entry(sdkPlugin, { name: '插件 SDK', description: '向动态加载的插件提供 DOM 渲染器构造、时间轴工具与 API 版本（sdk@1）。', category: 'settings', essential: true }),
     entry(timelinePlugin, { name: '共享时间轴', description: '采样插值、暂停与过期保护，所有视图共享时间基准。', category: 'timeline-provider', essential: true }),
     entry(rendererPlugin, { name: '普通文字', description: '干净的逐行、逐字与静态歌词；默认视觉基线。', category: 'renderer', rendererService: 'renderer.text@1', essential: true }),
     ...[...optional.values()],
@@ -155,10 +157,22 @@ async function boot() {
       catalog: source => reloader().catalog!(source),
       add: (id, source) => reloader().add!(id, source),
       remove: id => reloader().remove!(id),
-    };
+      get files() { return host.hasService('plugins.reload@1') ? reloader().files : undefined; },
+      exportBundle: (id, origin) => reloader().exportBundle!(id, origin),
+      exportable: (id, origin) => host.hasService('plugins.reload@1') && reloader().exportable!(id, origin),
+    } satisfies PluginReloader;
   })());
   await host.start(entries.filter(({ info }) => info.essential || initial.plugins.enabled[info.id] !== false).map(({ plugin }) => plugin));
   await host.service<ManualReload>('plugins.reload@1').ready();
+  // Installed plugins load on every start, and get back the renderer selection they had.
+  if (management.canRescan('local')) {
+    const wanted = (persistedPlugins as { rendererId?: unknown } | null)?.rendererId;
+    await management.rescan('local').then(report => {
+      for (const failure of report.failed) console.warn(`插件 ${failure.id} 未能加载：${failure.error}`);
+      if (typeof wanted === 'string' && report.added.includes(wanted) && store.get().plugins.enabled[wanted] !== false) management.selectRenderer(wanted);
+    }).catch(error => console.warn('已安装插件未能加载', error));
+    await host.service<ManualReload>('plugins.reload@1').broadcast().catch(console.error);
+  }
   store.update(state => ({ ...state }));
   let published: AppState | undefined;
   const publish = (force = false) => {

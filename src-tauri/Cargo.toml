@@ -22,5 +22,9 @@ tokio-tungstenite = "0.28"
 futures-util = { version = "0.3", features = ["sink"] }
 tauri-plugin-global-shortcut = "2.4.1"
 
+[target.'cfg(windows)'.dependencies]
+webview2-com = "0.39.1"
+windows-core = "0.62"
+
 [features]
 custom-protocol = ["tauri/custom-protocol"]

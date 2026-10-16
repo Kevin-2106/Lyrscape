@@ -1,7 +1,7 @@
 import { chromium, expect } from '@playwright/test';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { go } from './lib/nav.mjs';
+import { go, openPlugin } from './lib/nav.mjs';
 
 // PV renderers paint into a canvas; checks sample a pixel signature (alpha sum and
 // a coarse positional hash) plus the stage's data attributes.
@@ -25,7 +25,6 @@ const seek = async value => {
   await expect(page.locator('[data-seek]')).toHaveValue(String(value));
 };
 const importLyrics = async text => {
-  await page.locator('details.import-card').evaluate(element => { element.open = true; });
   await page.locator('[data-lyrics]').fill(text); await page.locator('[data-import]').click();
 };
 const configure = (card, key, value) => card.locator(`[data-plugin-config="${key}"]`).evaluate((element, value) => {
@@ -62,7 +61,6 @@ try {
   await go(page, 'lyrics');
   await page.locator('[data-adapter="demo"]').click();
   await go(page, 'plugins');
-  await page.locator('[data-plugin-filter]').selectOption('renderer');
   let overlay;
   if (native) {
     await page.evaluate(() => window.__TAURI_INTERNALS__.invoke('overlay_update', { visible: true, clickThrough: false, alwaysOnTop: true }));
@@ -71,8 +69,8 @@ try {
   const report = [];
   for (const style of ['pop', 'letter', 'elegy', 'vamp', 'synth', 'halo', 'halo2']) {
     console.log(`Checking ${style}: paint, timing, sync`);
-    const card = page.locator(`[data-plugin-id="official.renderer.pv-${style}"]`);
-    await go(page, 'plugins');
+    const card = page.locator(`[data-plugin-detail][data-plugin-id="official.renderer.pv-${style}"]`);
+    await openPlugin(page, `official.renderer.pv-${style}`);
     const use = card.locator('[data-plugin-use]');
     if (await use.isEnabled()) await use.click();
     await go(page, 'lyrics');
@@ -98,7 +96,6 @@ try {
     await seek(1500);
     await page.locator('#lyrics-preview').screenshot({ path: path.join(output, `${native ? 'native-' : ''}${style}-caption.png`) });
 
-    await card.locator('details').evaluate(element => { element.open = true; });
     await configure(card, 'scale', 1.2);
     await configure(card, 'motion', false);
     // Synthesis' and Halo's HUDs show a live clock and countdown (information, not animation); hide it for this check.
@@ -123,7 +120,7 @@ try {
     await expect(overlay.locator('.lyric-surface')).toBeVisible();
     await go(page, 'plugins');
     await card.locator('[data-plugin-toggle]').click(); await card.locator('[data-plugin-use]').click();
-    await card.locator('details').evaluate(element => { element.open = true; }); await card.locator('[data-plugin-reset]').click();
+    await card.locator('[data-plugin-reset]').click();
     await go(page, 'lyrics');
     if (!native) {
       console.log(`Checking ${style}: widths, word timing and glyph budget`);

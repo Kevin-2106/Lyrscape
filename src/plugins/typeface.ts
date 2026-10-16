@@ -1,4 +1,5 @@
 import type { LyricDocument } from '../sdk/types';
+import { bundledCoverage, ensureBundledFonts } from './font-assets';
 
 /**
  * Lyric-language aware typefaces. Every rendered line names exactly one CJK
@@ -85,8 +86,12 @@ let rangeVersion = -1;
 const ranges = new Map<string, [number, number][] | null>();
 /** Code-point ranges a bundled family covers (from its @font-face unicode-range), or null if unknown (system font). */
 function coverage(family: string): [number, number][] | null {
+  // Registered faces are only a subset of the family. Future lyric characters
+  // must be checked against the full bundled atlas, not today's loaded subsets.
+  const bundled = bundledCoverage(family);
+  if (bundled) return bundled;
   const fonts = typeof document !== 'undefined' ? document.fonts : undefined;
-  if (!fonts) return null;
+  if (!fonts) return bundledCoverage(family);
   if (rangeVersion !== fonts.size) { rangeVersion = fonts.size; ranges.clear(); }
   if (ranges.has(family)) return ranges.get(family)!;
   let found: [number, number][] | null = null;
@@ -100,8 +105,9 @@ function coverage(family: string): [number, number][] | null {
       found.push([lo, hi]);
     }
   });
-  ranges.set(family, found);
-  return found;
+  const result = found ?? bundledCoverage(family);
+  ranges.set(family, result);
+  return result;
 }
 /** Whether `family` has every visible character of `text` but emoji. Unknown (system) families are trusted. */
 export function covers(family: string, text: string): boolean {
@@ -138,6 +144,7 @@ export function faceFor(role: Role, lang: Lang, text: string, weight = 400, styl
     // whole text to whichever bundled Noto has every character, still one family.
     if (!covers(entry.family, text)) entry = [NOTO.ja, NOTO['zh-Hans'], NOTO['zh-Hant']].find(noto => covers(noto.family, text)) ?? entry;
   }
+  if (text) void ensureBundledFonts(entry.family, text).catch(console.error);
   return { family: `"${entry.family}", ${GENERIC[role]}`, weight: nearest(entry.weights, weight), style: entry.italic ? 'italic' : style === 'italic' && !cjk ? style : 'normal' };
 }
 
@@ -154,5 +161,6 @@ export const AUTO_FAMILIES: Record<string, { label: string; role: Role }> = {
 /** Resolves a theme font setting: auto presets pick the face for `lang`; anything else is the user's CSS family. */
 export function themeFamily(setting: string, lang: Lang, text = ''): string {
   const preset = AUTO_FAMILIES[setting];
+  if (!preset && text) void ensureBundledFonts(setting, text).catch(console.error);
   return preset ? faceFor(preset.role, lang, text).family : setting;
 }

@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
-    "build": "tsc --noEmit && vite build",
+    "build": "node scripts/build-font-manifest.mjs && tsc --noEmit && vite build",
     "preview": "vite preview --host 127.0.0.1",
     "test": "vitest run",
     "test:browser": "node scripts/smoke-browser.mjs",
@@ -13,7 +13,8 @@
     "plugins:build": "node scripts/build-editable-plugins.mjs",
     "desktop:dev": "tauri dev",
     "desktop:build": "tauri build --no-bundle",
-    "desktop:package": "tauri build"
+    "desktop:package": "tauri build",
+    "plugin:pack": "node scripts/pack-plugin.mjs"
   },
   "dependencies": {
     "@fontsource/dela-gothic-one": "5.3.0",

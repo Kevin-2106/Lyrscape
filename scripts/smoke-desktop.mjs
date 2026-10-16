@@ -1,11 +1,13 @@
 import { chromium, expect } from '@playwright/test';
-import { go } from './lib/nav.mjs';
+import { go, showNativeOverlay } from './lib/nav.mjs';
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 
 const output = process.env.LYRSCAPE_QA_DIR ?? path.resolve('qa');
 await mkdir(output, { recursive: true });
 const browser = await chromium.connectOverCDP(process.env.LYRSCAPE_CDP ?? 'http://127.0.0.1:9227');
+await showNativeOverlay(browser.contexts()[0]);
+await browser.contexts()[0].pages().find(page => !page.url().includes('surface=overlay')).evaluate(() => window.__TAURI_INTERNALS__.invoke('overlay_update', { visible: false }));
 const pages = browser.contexts().flatMap(c => c.pages());
 const main = pages.find(p => !p.url().includes('surface=overlay'));
 const overlay = pages.find(p => p.url().includes('surface=overlay'));

@@ -3,7 +3,7 @@ import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { go } from './lib/nav.mjs';
+import { go, openPlugin, showNativeOverlay } from './lib/nav.mjs';
 
 // Launches its own profile and never connects to the everyday instance.
 // Example: node scripts/smoke-memory.mjs --exe=qa/memory/baseline.exe --label=baseline
@@ -25,6 +25,7 @@ try {
     try { browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`); break; } catch { await wait(250); }
   }
   if (!browser) throw Error('QA WebView2 did not start');
+  await showNativeOverlay(browser.contexts()[0]);
   await expect.poll(() => browser.contexts()[0].pages().filter(p => p.url().startsWith('http://tauri.localhost')).length).toBe(2);
   const pages = browser.contexts()[0].pages();
   const main = pages.find(p => !p.url().includes('surface=overlay')), overlay = pages.find(p => p.url().includes('surface=overlay'));
@@ -32,7 +33,7 @@ try {
   const errors = [];
   for (const page of pages) page.on('pageerror', error => errors.push(error.message));
   await go(main, 'plugins');
-  await main.locator('[data-plugin-id="official.renderer.pv-pop"] [data-plugin-use]').click();
+  await (await openPlugin(main, 'official.renderer.pv-pop')).locator('[data-plugin-use]').click();
   await invoke(main, 'overlay_update', { visible: true });
   await go(main, 'lyrics');
   await main.locator('[data-adapter="amll"]').click();

@@ -6,8 +6,23 @@ import { normalizeSettings } from '../src/plugins/theme';
 import { createPvStage } from '../src/plugins/pv/stage';
 import { sprite } from '../src/plugins/pv/paint';
 import { mountPluginManager } from '../src/ui/plugin-manager';
+import { createDomRenderer } from '../src/plugins/renderer';
+import * as fontAssets from '../src/plugins/font-assets';
 
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+
+it('loads a custom bundled DOM font for the actual lyric text while keeping inheritance', () => {
+  const load = vi.spyOn(fontAssets, 'ensureBundledFonts').mockResolvedValue();
+  vi.stubGlobal('requestAnimationFrame', () => 1); vi.stubGlobal('cancelAnimationFrame', vi.fn());
+  const family = '"Share Tech Mono", monospace';
+  const state = { settings: normalizeSettings({ fontFamily: family }), plugins: normalizePreferences(null),
+    lyrics: { timingMode: 'none', lines: [{ id: 'one', text: 'HELLO WORLD' }] } } as AppState;
+  const root = document.createElement('div');
+  const dispose = createDomRenderer().mount(root, () => state, { position: () => 0 });
+  expect(load).toHaveBeenCalledWith(family, 'HELLO WORLD');
+  expect(root.querySelector<HTMLElement>('.lyric-current')!.style.fontFamily).toBe('');
+  dispose();
+});
 
 it('does not refresh the plugin catalog for playback-only state updates', () => {
   let state = { plugins: normalizePreferences(null) } as AppState;

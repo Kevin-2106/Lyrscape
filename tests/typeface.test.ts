@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import * as fontAssets from '../src/plugins/font-assets';
 import { normalizeSettings } from '../src/plugins/theme';
 import { covers, detectLang, documentLangs, faceFor, lineLang, themeFamily } from '../src/plugins/typeface';
 import type { LyricDocument } from '../src/sdk/types';
@@ -84,10 +85,13 @@ describe('faces', () => {
 
 describe('coverage fallback', () => {
   const original = Object.getOwnPropertyDescriptor(document, 'fonts');
-  afterEach(() => { if (original) Object.defineProperty(document, 'fonts', original); else delete (document as { fonts?: unknown }).fonts; });
-  const install = (faces: { family: string; unicodeRange: string }[]) => Object.defineProperty(document, 'fonts', {
+  afterEach(() => { vi.restoreAllMocks(); if (original) Object.defineProperty(document, 'fonts', original); else delete (document as { fonts?: unknown }).fonts; });
+  const install = (faces: { family: string; unicodeRange: string }[]) => {
+    vi.spyOn(fontAssets, 'bundledCoverage').mockReturnValue(null);
+    return Object.defineProperty(document, 'fonts', {
     configurable: true, value: { size: faces.length + Math.random(), forEach: (callback: (face: unknown) => void) => faces.forEach(callback) },
-  });
+    });
+  };
 
   it('hands a whole line to the complete face when a decorative face lacks a character', () => {
     install([

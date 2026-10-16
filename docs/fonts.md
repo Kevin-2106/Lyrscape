@@ -29,7 +29,7 @@
 
 ## 主题字体
 
-「文字样式 → 字体」新增 4 个自动预设，用于普通文字、Aurora 与 Apple Music 风格；默认值为「自动 · 黑体」：
+「渲染器 › 文字 → 字体」新增 4 个自动预设，用于普通文字、Aurora 与 Apple Music 风格；默认值为「自动 · 黑体」：
 
 | 预设 | 对应角色 |
 | --- | --- |
@@ -43,7 +43,8 @@
 ## 开发
 
 - PV 风格不再引用固定字体族：`PvLine.face(role, weight?, style?)` / `tface(...)` 返回该行 / 译文的 `{ family, weight, style }`，并请求加载恰好这段文字的子集；`faceFont(face, size)` 生成 canvas font 字符串。`PvStyle.fonts` 只列固定的拉丁 / HUD 字体。
-- 字体 CSS 在 `src/plugins/pv/fonts.ts` 引入；热重载插件包把 `@fontsource/*` 与 `lxgw-wenkai-webfont/*` 映射为空模块，沿用宿主已加载的字体。
+- 字体 CSS 由 `src/plugins/font-catalog.ts` 声明本地动态 chunk；`font-assets.ts` 按实际字符注册子集，`pv/fonts.ts` 等待注册后再加载字节。构建先运行 `scripts/build-font-manifest.mjs` 生成完整覆盖元数据，缺字判定不依赖已注册的局部字面。普通文字的自定义字体也走这个入口。
+- 热重载插件包把 `@fontsource/*` 与 `lxgw-wenkai-webfont/*` 映射为空模块，复用宿主共享字体 registry；旧 bundle 按引用字体族加载兼容 CSS，不覆盖用户本地修改。2026-10-16 的常驻内存对比见 [第二轮优化](memory-footprint.md)。
 
 ## 代价与验证
 

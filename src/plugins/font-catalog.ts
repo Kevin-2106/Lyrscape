@@ -1,0 +1,22 @@
+/** Local CSS chunks are fetched only when their family is first used. */
+export const fontCatalog: Record<string, (() => Promise<{ default: string }>)[]> = {
+  'Mochiy Pop One': [() => import('@fontsource/mochiy-pop-one/400.css?inline')],
+  'Zen Maru Gothic': [() => import('@fontsource/zen-maru-gothic/500.css?inline')],
+  'Klee One': [() => import('@fontsource/klee-one/600.css?inline')],
+  'Noto Sans JP': [() => import('@fontsource/noto-sans-jp/500.css?inline'), () => import('@fontsource/noto-sans-jp/700.css?inline'), () => import('@fontsource/noto-sans-jp/900.css?inline')],
+  'Shippori Mincho': [() => import('@fontsource/shippori-mincho/700.css?inline')],
+  'Playfair Display': [() => import('@fontsource/playfair-display/400-italic.css?inline')],
+  'EB Garamond': [() => import('@fontsource/eb-garamond/400-italic.css?inline')],
+  'Dela Gothic One': [() => import('@fontsource/dela-gothic-one/400.css?inline')],
+  'Share Tech Mono': [() => import('@fontsource/share-tech-mono/400.css?inline')],
+  'M PLUS 1 Code': [() => import('@fontsource/m-plus-1-code/300.css?inline'), () => import('@fontsource/m-plus-1-code/500.css?inline')],
+  'Noto Sans SC': [() => import('@fontsource/noto-sans-sc/500.css?inline'), () => import('@fontsource/noto-sans-sc/700.css?inline'), () => import('@fontsource/noto-sans-sc/900.css?inline')],
+  'Noto Serif SC': [() => import('@fontsource/noto-serif-sc/700.css?inline')],
+  'ZCOOL KuaiLe': [() => import('@fontsource/zcool-kuaile/400.css?inline')],
+  'ZCOOL QingKe HuangYou': [() => import('@fontsource/zcool-qingke-huangyou/400.css?inline')],
+  'LXGW WenKai': [() => import('lxgw-wenkai-webfont/lxgwwenkai-regular.css?inline')],
+  'Noto Sans TC': [() => import('@fontsource/noto-sans-tc/500.css?inline'), () => import('@fontsource/noto-sans-tc/700.css?inline'), () => import('@fontsource/noto-sans-tc/900.css?inline')],
+  'Noto Serif TC': [() => import('@fontsource/noto-serif-tc/700.css?inline')],
+  'Huninn': [() => import('@fontsource/huninn/400.css?inline')],
+  'LXGW WenKai TC': [() => import('@fontsource/lxgw-wenkai-tc/400.css?inline')],
+};
