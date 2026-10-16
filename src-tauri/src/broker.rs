@@ -63,13 +63,6 @@ struct ConnectionEvent {
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct MessageEvent {
-    connection_id: String,
-    payload: Value,
-}
-
-#[derive(Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
 struct ErrorEvent {
     connection_id: Option<String>,
     message: String,
@@ -281,6 +274,9 @@ struct ConnectionGuard {
 impl Drop for ConnectionGuard {
     fn drop(&mut self) {
         self.app
+            .state::<crate::session::Session>()
+            .disconnect(&self.id);
+        self.app
             .state::<crate::audio::AudioHub>()
             .discontinuity(&self.id, true);
         self.connections
@@ -453,13 +449,8 @@ async fn client(
                     app.state::<crate::audio::AudioHub>()
                         .discontinuity(&id, false);
                 }
-                let _ = app.emit(
-                    "amll-message",
-                    MessageEvent {
-                        connection_id: id.clone(),
-                        payload,
-                    },
-                );
+                let message = app.state::<crate::session::Session>().record(&id, payload);
+                let _ = app.emit("amll-message", message);
             }
             Ok(Decoded::Pcm(data)) => app.state::<crate::audio::AudioHub>().push(
                 &id,

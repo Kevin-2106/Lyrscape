@@ -15,6 +15,8 @@ type Request = { transaction: string; phase: Phase; bundle: Bundle };
 type Reply = { key: string; error?: string };
 export interface ManualReload extends PluginReloader {
   ready(): Promise<void>;
+  /** Replays this app session's committed code after rebuilding the control WebView. */
+  restore(): Promise<void>;
   /** Control window: pushes every loaded bundle to the overlay (after the boot scan, when both windows start together). */
   broadcast(): Promise<void>;
 }
@@ -52,6 +54,8 @@ async function devJson<T>(url: string): Promise<T> {
 export function manualReloadPlugin(host: PluginHost, store: Store<AppState>, overlay: boolean, registry: PluginRegistry): Plugin {
   return { id: 'official.plugins.manual-reload', async activate(ctx) {
     const builtins = new Map<string, Plugin>(), committed = new Map<string, Bundle>();
+    let savedBundles: Bundle[] = [];
+    const checkpoint = async () => { if (desktop && !overlay) await native('session_bundles', { bundles: [...committed.values()] }); };
     const stages = new Map<string, { previous?: Plugin; candidate: LoadedPlugin; changed: boolean }>();
     const waiting = new Map<string, (reply: Reply) => void>();
     let ready = false, active = true;
@@ -72,9 +76,9 @@ export function manualReloadPlugin(host: PluginHost, store: Store<AppState>, ove
       return { id, builtin: true };
     };
     /** Overlay-side registration of a plugin it did not boot with. */
-    const register = async (loaded: LoadedPlugin) => {
+    const register = async (loaded: LoadedPlugin, enabled = true) => {
       if (!loaded.manifest) throw Error('新增插件需要导出 manifest');
-      await host.start([loaded.plugin]);
+      if (enabled) await host.start([loaded.plugin]);
       registry.set({ info: infoOf(loaded.manifest), plugin: loaded.plugin, origin: 'source' });
     };
     const unregister = (id: string) => {
@@ -176,10 +180,41 @@ export function manualReloadPlugin(host: PluginHost, store: Store<AppState>, ove
       async ready() {
         for (const entry of registry.list()) if (!entry.info.essential && entry.origin === 'builtin') builtins.set(entry.info.id, entry.plugin);
         ready = true;
-        if (overlay) await sendEvent('plugin-reload-sync-request');
-        else await sendEvent('plugin-catalog-reset');
+        if (overlay) {
+          if (desktop && !(await native<{ controlActive: boolean }>('session_restore')).controlActive) {
+            savedBundles = await native<Bundle[]>('session_bundles');
+            await service.restore();
+          }
+          await sendEvent('plugin-reload-sync-request');
+        }
+        else {
+          if (desktop) savedBundles = await native<Bundle[]>('session_bundles');
+          const restored = desktop && (await native<{ snapshot: unknown }>('session_restore')).snapshot;
+          if (!restored) await sendEvent('plugin-catalog-reset');
+        }
+      },
+      async restore() {
+        for (const bundle of savedBundles) {
+          if (overlay && bundle.id === 'official.adapter.amll') continue;
+          if (bundle.removed) { committed.set(bundle.id, bundle); continue; }
+          const loaded = await load(bundle);
+          if (overlay && !registry.get(bundle.id) && (!loaded.manifest || !surfacesOf(loaded.manifest).includes('overlay'))) continue;
+          const previous = host.definition(bundle.id);
+          if (previous) {
+            await host.replace(bundle.id, loaded.plugin);
+            registry.update(bundle.id, { plugin: loaded.plugin, ...loaded.manifest ? { info: infoOf(loaded.manifest) } : {} });
+          } else if (registry.get(bundle.id)) {
+            registry.update(bundle.id, { plugin: loaded.plugin, ...loaded.manifest ? { info: infoOf(loaded.manifest) } : {} });
+          } else if (bundle.added) {
+            await register(loaded, store.get().plugins.enabled[bundle.id] !== false);
+          }
+          committed.set(bundle.id, bundle);
+        }
+        savedBundles = [];
+        await checkpoint();
       },
       async broadcast() {
+        await checkpoint();
         if (!overlay && ready) await sendEvent('plugin-reload-sync', [...committed.values()].filter(b => b.id !== 'official.adapter.amll'));
       },
       async reload(id, source, previous) {
@@ -202,6 +237,7 @@ export function manualReloadPlugin(host: PluginHost, store: Store<AppState>, ove
           if (peerPrepared) await peer('commit', bundle, transaction);
           if (peerPrepared) await sendEvent('plugin-reload-request', { transaction, phase: 'finish', bundle } satisfies Request);
           committed.set(id, { ...bundle, added: committed.get(id)?.added });
+          await checkpoint();
           return candidate;
         } catch (error) {
           const failures: string[] = [];
@@ -236,6 +272,7 @@ export function manualReloadPlugin(host: PluginHost, store: Store<AppState>, ove
               await sendEvent('plugin-reload-request', { transaction, phase: 'finish', bundle } satisfies Request);
             }
             committed.set(id, bundle);
+            await checkpoint();
           },
           async abort() { if (peerPrepared) await peer('rollback', bundle, transaction); } };
       },
@@ -243,6 +280,7 @@ export function manualReloadPlugin(host: PluginHost, store: Store<AppState>, ove
         const bundle: Bundle = { id, removed: true };
         committed.set(id, bundle);
         await peer('remove', bundle, crypto.randomUUID(), !desktop);
+        await checkpoint();
       },
       files: pluginStorage && !overlay ? {
         read: id => pluginStorage!.read(id).catch(() => undefined),

@@ -14,7 +14,9 @@ import { parseLyrics } from './plugins/parsers';
 import { mountApp } from './ui/shell';
 import type { UiContext } from './ui/context';
 import pkg from '../package.json';
-import { desktop, onEvent, sendOverlayEvent } from './platform';
+import { desktop, native, onEvent, sendOverlayEvent } from './platform';
+import { restoreSession, type SessionSnapshot } from './session';
+import { amllPlugin } from './plugins/amll';
 import { catalog } from './plugins/catalog';
 import { AMLL_ADAPTER, createPluginManagement, normalizePreferences, rendererSelectionPlugin, type PluginReloader } from './plugins/management';
 import { sdkPlugin } from './plugins/sdk';
@@ -35,22 +37,64 @@ const initial: AppState = {
   overlay: { visible: false, clickthrough: false, alwaysOnTop: true, borderVisible: false }, isDesktop: desktop,
 };
 const store = new Store(initial), host = new PluginHost(), registry = new PluginRegistry();
+function resetPreferences() {
+  localStorage.removeItem('lyrscape.settings.v1'); localStorage.removeItem('lyrscape.plugins.v1'); localStorage.removeItem('lyrscape.shortcuts.v1');
+  localStorage.setItem('lyrscape.reset-preferences', '1');
+  location.reload();
+}
 /** Built-in catalog plugins for this window, created against its own store. */
 const builtin = (surface: 'control' | 'overlay') => catalog.filter(item => surfacesOf(item.manifest).includes(surface))
   .map((item): RegistryEntry => ({ info: infoOf(item.manifest), plugin: item.create(store), origin: 'builtin' }));
 
 async function boot() {
+  if (desktop && !isOverlay) await native('control_loading');
+  const recovered = desktop ? await native<{ snapshot: SessionSnapshot | null; controlActive: boolean }>('session_restore') : undefined;
+  if (recovered?.snapshot) store.set(restoreSession(recovered.snapshot));
+  if (!isOverlay) {
+    try {
+      if (localStorage.getItem('lyrscape.reset-preferences') === '1') {
+        localStorage.removeItem('lyrscape.reset-preferences');
+        store.update(s => ({ ...s, settings: initial.settings, plugins: initial.plugins }));
+      }
+    } catch { /* defaults still work when browser storage is unavailable */ }
+  }
   if (isOverlay) {
     const plugins = builtin('overlay');
     for (const entry of plugins) registry.set(entry);
-    await host.start([pcmAudioPlugin, sdkPlugin, manualReloadPlugin(host, store, true, registry), themePlugin, timelinePlugin, rendererPlugin, ...plugins.map(entry => entry.plugin), rendererSelectionPlugin(host, registry), overlaySurfacePlugin(root, store, true)]);
+    await host.start([pcmAudioPlugin, sdkPlugin, manualReloadPlugin(host, store, true, registry), themePlugin, timelinePlugin, rendererPlugin, ...plugins.map(entry => entry.plugin), ...(desktop ? [amllPlugin(store, true)] : []), rendererSelectionPlugin(host, registry), overlaySurfacePlugin(root, store, true)]);
     await host.service<ManualReload>('plugins.reload@1').ready();
+    if (desktop) {
+      let controlActive = recovered?.controlActive ?? true;
+      let previous: AppState | undefined;
+      function publishBackground(force = false) {
+        if (controlActive) return;
+        const state = store.get();
+        const anchor = { sampleAgeMs: Math.max(0, performance.now() - state.playback.observedAtMonoMs), sentAtEpochMs: Date.now() };
+        const full = force || !previous || (Object.keys(state) as (keyof AppState)[]).some(key => key !== 'playback' && state[key] !== previous![key]);
+        void native('session_publish', { event: full ? 'lyrscape-state' : 'lyrscape-playback', payload: full ? { state, ...anchor } : { playback: state.playback, ...anchor } }).catch(console.error);
+        previous = state;
+      }
+      const unpresence = await onEvent<boolean>('control-presence', active => { controlActive = active; if (!active) publishBackground(true); });
+      controlActive = (await native<{ controlActive: boolean }>('session_restore')).controlActive;
+      publishBackground(true);
+      const unsubscribe = store.subscribe(() => publishBackground());
+      const refresh = window.setInterval(() => {
+        if (!controlActive && store.get().adapterId === 'demo') {
+          const state = store.get();
+          if (state.playback.playing && host.service<Timeline>('timeline@1').position(state) >= (state.track.durationMs ?? Infinity)) {
+            store.update(s => ({ ...s, playback: { ...s.playback, positionMs: 0, observedAtMonoMs: performance.now() } }));
+          }
+        }
+        publishBackground();
+      }, 1000);
+      window.addEventListener('beforeunload', () => { unpresence(); unsubscribe(); clearInterval(refresh); });
+    }
     window.addEventListener('beforeunload', () => host.stop());
     return;
   }
 
   const parserPlugin: Plugin = { id: 'official.parser.baseline', activate: ctx => ctx.provide('parser@1', { parse: parseLyrics }) };
-  let demoSnapshot: PlaybackSnapshot = { track: initial.track, lyrics: initial.lyrics, playback: initial.playback };
+  let demoSnapshot: PlaybackSnapshot = recovered?.snapshot?.demoSnapshot ?? (store.get().adapterId === 'demo' ? store.get() : { track: initial.track, lyrics: initial.lyrics, playback: initial.playback });
   const timeline = () => host.service<Timeline>('timeline@1');
   const guarded = (task: () => void | Promise<void>): Promise<void> =>
     Promise.resolve().then(task).catch(e => {
@@ -72,8 +116,7 @@ async function boot() {
     }),
     resetSettings: () => api.updateSettings(normalizeSettings(undefined)),
     resetEverything: () => {
-      try { localStorage.removeItem('lyrscape.settings.v1'); localStorage.removeItem('lyrscape.plugins.v1'); localStorage.removeItem('lyrscape.shortcuts.v1'); } catch { /* reload still applies defaults */ }
-      location.reload();
+      try { resetPreferences(); } catch { location.reload(); }
     },
     selectAdapter: id => {
       if (id === 'amll' && !host.hasService('adapter.amll@1')) throw new Error('请先在插件管理中启用 AMLL 连接。');
@@ -162,7 +205,7 @@ async function boot() {
       exportable: (id, origin) => host.hasService('plugins.reload@1') && reloader().exportable!(id, origin),
     } satisfies PluginReloader;
   })());
-  await host.start(entries.filter(({ info }) => info.essential || initial.plugins.enabled[info.id] !== false).map(({ plugin }) => plugin));
+  await host.start(entries.filter(({ info }) => info.essential || store.get().plugins.enabled[info.id] !== false).map(({ plugin }) => plugin));
   await host.service<ManualReload>('plugins.reload@1').ready();
   // Installed plugins load on every start, and get back the renderer selection they had.
   if (management.canRescan('local')) {
@@ -171,33 +214,42 @@ async function boot() {
       for (const failure of report.failed) console.warn(`插件 ${failure.id} 未能加载：${failure.error}`);
       if (typeof wanted === 'string' && report.added.includes(wanted) && store.get().plugins.enabled[wanted] !== false) management.selectRenderer(wanted);
     }).catch(error => console.warn('已安装插件未能加载', error));
-    await host.service<ManualReload>('plugins.reload@1').broadcast().catch(console.error);
   }
+  await host.service<ManualReload>('plugins.reload@1').restore();
+  await host.service<ManualReload>('plugins.reload@1').broadcast().catch(console.error);
+  if (desktop) await native('control_ready');
   store.update(state => ({ ...state }));
   let published: AppState | undefined;
   const publish = (force = false) => {
     const state = store.get();
     const anchor = { sampleAgeMs: Math.max(0, performance.now() - state.playback.observedAtMonoMs), sentAtEpochMs: Date.now() };
     const full = force || !published || (Object.keys(state) as (keyof AppState)[]).some(key => key !== 'playback' && state[key] !== published![key]);
-    if (full) void sendOverlayEvent('lyrscape-state', { state, ...anchor }).catch(console.error);
+    if (full) void sendOverlayEvent('lyrscape-state', { state, demoSnapshot, ...anchor }).catch(console.error);
     else void sendOverlayEvent('lyrscape-playback', { playback: state.playback, ...anchor }).catch(console.error);
     published = state;
   };
   const unsubscribe = store.subscribe(() => publish());
   const unrequest = await onEvent('lyrscape-state-request', () => publish(true));
+  publish(true);
   // Occasional fresh anchors prevent cross-realm drift; rendering remains local to each surface.
   const refresh = window.setInterval(() => {
     const state = store.get();
     if (state.adapterId === 'demo' && state.playback.playing && timeline().position(state) >= (state.track.durationMs ?? Infinity)) api.seek(0);
     publish();
   }, 1000);
-  window.addEventListener('beforeunload', () => { clearInterval(refresh); unsubscribe(); unrequest(); host.stop(); });
+  window.addEventListener('beforeunload', () => {
+    clearInterval(refresh); unsubscribe(); unrequest();
+    // Native close destroys this realm. Broker, audio selection and global keys
+    // belong to the app and must not be stopped by plugin teardown on that path.
+    if (!desktop) host.stop();
+  });
 }
 
 void boot().catch(error => {
+  if (desktop && !isOverlay) void native('control_ready', { ready: false }).catch(console.error);
   console.error(error); root.replaceChildren();
   const message = document.createElement('pre'); message.textContent = `Lyrscape 启动失败\n${String(error)}`;
   const reset = document.createElement('button'); reset.textContent = '恢复默认设置并重启';
-  reset.onclick = () => { localStorage.removeItem('lyrscape.settings.v1'); localStorage.removeItem('lyrscape.plugins.v1'); localStorage.removeItem('lyrscape.shortcuts.v1'); location.reload(); };
+  reset.onclick = () => { resetPreferences(); };
   root.append(message, reset);
 });

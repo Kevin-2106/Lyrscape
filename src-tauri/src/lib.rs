@@ -2,7 +2,9 @@ mod amll_protocol;
 mod audio;
 mod broker;
 mod plugin_source;
+mod session;
 mod shortcuts;
+mod tray;
 
 use broker::{Broker, BrokerStatus};
 use serde::Serialize;
@@ -293,6 +295,12 @@ pub fn run() {
         .manage(OverlayState::default())
         .manage(shortcuts::ShortcutRegistry::default())
         .manage(audio::AudioHub::default())
+        .manage(session::Session::default())
+        .manage(tray::ControlLifecycle::default())
+        .setup(|app| {
+            tray::install(app)?;
+            Ok(())
+        })
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, shortcut, event| shortcuts::handle(app, shortcut, event.state))
@@ -306,6 +314,12 @@ pub fn run() {
             overlay_status,
             overlay_exists,
             overlay_fit,
+            session::session_restore,
+            session::session_publish,
+            session::session_bundles,
+            session::amll_replay,
+            tray::control_ready,
+            tray::control_loading,
             shortcuts::shortcuts_status,
             shortcuts::shortcut_set,
             shortcuts::shortcuts_clear,
@@ -328,7 +342,10 @@ pub fn run() {
             }
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 match window.label() {
-                    "main" => window.app_handle().exit(0),
+                    "main" => {
+                        api.prevent_close();
+                        tray::park_control(window.app_handle().clone());
+                    }
                     "overlay" => {
                         api.prevent_close();
                         let state = window.app_handle().state::<OverlayState>();
@@ -344,10 +361,23 @@ pub fn run() {
                     _ => {}
                 }
             }
+            if matches!(event, tauri::WindowEvent::Destroyed) {
+                window
+                    .app_handle()
+                    .state::<audio::AudioHub>()
+                    .remove_window(window.label());
+            }
         })
         .build(tauri::generate_context!())
         .expect("Unable to initialize Lyrscape desktop host");
     app.run(|app, event| {
+        if let tauri::RunEvent::ExitRequested {
+            api, code: None, ..
+        } = &event
+        {
+            // All views may be gone; the native tray and broker still own the app.
+            api.prevent_exit();
+        }
         if matches!(event, tauri::RunEvent::Exit) {
             app.state::<Broker>().shutdown_on_exit();
         }

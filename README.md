@@ -62,6 +62,7 @@ AMLL adapter 与 AMLL 渲染器是两个独立插件；接入 AMLL 协议不要�
 - [本地开发与验证](docs/development.md)
 - [内存排查、优化与原生对比](docs/memory-optimization.md)
 - [常驻内存、按需窗口与字体子集](docs/memory-footprint.md)
+- [关闭到托盘与主窗口资源释放](docs/tray-lifecycle.md)
 - [插件编写手册（.lyrx 包格式、渲染器 / 特效、打包与发布）](docs/plugin-authoring.md)
 - [插件开发与可编译示例](docs/plugin-development.md)
 - [交接清单](docs/handoff.md)

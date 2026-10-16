@@ -97,6 +97,14 @@ impl HubState {
 }
 
 impl AudioHub {
+    pub fn selected_source(&self) -> Option<String> {
+        self.0.lock().ok().and_then(|hub| hub.selected.clone())
+    }
+    pub fn remove_window(&self, label: &str) {
+        if let Ok(mut hub) = self.0.lock() {
+            hub.subscribers.remove(label);
+        }
+    }
     pub fn push(&self, connection: &str, data: Vec<u8>, protocol_version: u8) {
         let Ok(mut hub) = self.0.lock() else {
             return;
@@ -222,7 +230,20 @@ pub fn amll_audio_select(
     hub: State<'_, AudioHub>,
     connection_id: Option<String>,
 ) -> Result<(), String> {
-    super::require_control(&window)?;
+    require_audio_window(&window)?;
+    if window.label() == "overlay" {
+        use tauri::Manager;
+        if window
+            .app_handle()
+            .state::<super::session::Session>()
+            .0
+            .lock()
+            .map_err(|_| "Session unavailable")?
+            .control_active
+        {
+            return Err("The active control window owns the audio source".into());
+        }
+    }
     if connection_id
         .as_ref()
         .is_some_and(|s| s.len() > 80 || !s.starts_with("amll-"))

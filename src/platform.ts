@@ -1,5 +1,5 @@
 import { invoke, isTauri } from '@tauri-apps/api/core';
-import { emit, emitTo, listen } from '@tauri-apps/api/event';
+import { emit, listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 
 export const desktop = isTauri();
@@ -22,7 +22,7 @@ export async function sendEvent(event: string, payload?: unknown): Promise<void>
 /** Playback/state belong to the overlay; broadcasting them also evaluates large
  * payload scripts in the control window, which has no consumer for them. */
 export async function sendOverlayEvent(event: string, payload?: unknown): Promise<void> {
-  if (desktop) await emitTo({ kind: 'WebviewWindow', label: 'overlay' }, event, payload);
+  if (desktop) await invoke('session_publish', { event, payload });
   else channel?.postMessage({ event, payload });
 }
 export async function native<T>(command: string, args?: Record<string, unknown>): Promise<T> {

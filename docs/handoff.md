@@ -6,6 +6,8 @@
 
 ## 先核实，不覆盖
 
+2026-10-16 托盘行为：此前工作区成果已提交为 `dbaab72`；新增关闭到托盘、销毁主窗口和会话恢复，见 [托盘生命周期](tray-lifecycle.md)。最终前端 98 / Rust 19 项测试及原生托盘、旧 AMLL 插件、PCM、恢复和重置回归通过，默认 exe 已更新并保留旧版。测试必须使用独立 profile 和端口，不能把用户主窗口关闭操作用作 smoke。
+
 ```powershell
 git status --short --branch
 git log -5 --oneline
@@ -17,7 +19,7 @@ Get-CimInstance Win32_Process -Filter "name = 'lyrscape.exe'" |
   Select-Object ProcessId,ExecutablePath
 ```
 
-上一已提交版本是 `81d3fe1`；当前插件 UI / Aurora / 三个 PV renderer 与本轮修复可能仍是工作区修改，**以 git status 为准**。不要 reset 或覆盖他人修改，不自动公开仓库，不把未提交的 exe 当作该 commit 的产物。
+历史基线为 `81d3fe1`；本轮开始前的插件 UI、插件包及内存优化已归入 `dbaab72`。当前提交与修改情况仍以 git log / status 为准。不要 reset 或覆盖他人修改，不自动公开仓库，不把未提交的 exe 当作该 commit 的产物。
 
 ## 运行中的用户实例
 
