@@ -1,5 +1,5 @@
 import type { ConfigField, PluginManifest } from '../sdk/types';
-import { pvFields, pvProfiles } from './pv-presets';
+import { pvFields, pvProfiles, pvTheme } from './pv-presets';
 
 // Pure data: no DOM, fonts or platform imports. The development server evaluates
 // this module in Node to list the source catalog without loading any plugin code.
@@ -37,5 +37,5 @@ export const builtinManifests: PluginManifest[] = [
   { id: AMLL_ADAPTER, name: 'AMLL 连接', description: '只读接收 AMLL V1 / V2 曲目、歌词与进度，独立于渲染器。', category: 'playback-adapter', fields: amllFields, surfaces: ['control'] },
   { id: AURORA_RENDERER, name: 'Aurora · 流光', description: '彗星飞入、旋转落位、棱镜展开，配合文字光晕与星芒。', category: 'renderer', rendererService: 'renderer.aurora@1', fields: auroraFields },
   ...pvProfiles.map((profile): PluginManifest => ({ id: profile.id, name: profile.name, description: profile.description,
-    category: 'renderer', rendererService: profile.service, fields: pvFields(profile) })),
+    category: 'renderer', rendererService: profile.service, fields: pvFields(profile), theme: pvTheme(profile) })),
 ];

@@ -1,7 +1,7 @@
 import { clamp01, isSpace, lineBoundary } from './core';
 import { AUTO_FAMILIES, type Face } from '../typeface';
-import { blit, sprite, type Sprite } from './paint';
-import { faceFont, type PvEnv, type PvFrame, type PvLine, type PvSceneApi, type PvStyle } from './stage';
+import { blit, rgba, sprite, type Sprite } from './paint';
+import { faceFont, hue, type PvEnv, type PvFrame, type PvLine, type PvSceneApi, type PvStyle } from './stage';
 
 // Apple Music-like scrolling list, after AMLL's lyric player (behaviour only,
 // independently implemented): left-aligned bold lines, the current line near
@@ -22,12 +22,12 @@ const themeFace = (setting: string, pick: (role: typeof AUTO_FAMILIES[string]['r
   const auto = AUTO_FAMILIES[setting];
   return auto ? pick(auto.role, weight) : { family: setting, weight, style: 'normal' };
 };
-const textSprite = (text: string, size: number, k: number, face: Face) => {
+const textSprite = (text: string, size: number, k: number, face: Face, ink: string) => {
   const probe = document.createElement('canvas').getContext('2d');
   if (probe) probe.font = faceFont(face, size);
   const w = Math.max(1, probe?.measureText(text).width ?? size * text.length), pad = size * 0.3;
   return sprite(w + pad * 2, size * 1.5, k, (g, k) => {
-    g.font = faceFont(face, size); g.textBaseline = 'middle'; g.fillStyle = '#ffffff';
+    g.font = faceFont(face, size); g.textBaseline = 'middle'; g.fillStyle = ink;
     // A soft dark shadow keeps white text legible when the desktop behind is light.
     g.shadowColor = 'rgba(0,0,0,0.42)'; g.shadowBlur = size * 0.14 * k; g.shadowOffsetY = size * 0.02 * k;
     g.fillText(text, pad, size * 0.75);
@@ -35,7 +35,7 @@ const textSprite = (text: string, size: number, k: number, face: Face) => {
 };
 
 function layout(g: CanvasRenderingContext2D, line: PvLine, env: PvEnv): Layout {
-  const S = env.size, dpr = env.dpr, face = themeFace(env.fontFamily, line.face, 700);
+  const S = env.size, dpr = env.dpr, face = themeFace(env.fontFamily, line.face, 700), ink = hue(env, 'ink', '#ffffff');
   const timed = line.words.length > 0;
   // Tokens: real words when timed, otherwise word-segmenter chunks.
   const groups: number[][] = [];
@@ -54,14 +54,14 @@ function layout(g: CanvasRenderingContext2D, line: PvLine, env: PvEnv): Layout {
     if (x > 0 && x + w > maxW && text.trim()) { row++; x = 0; }
     if (!text.trim()) { x += w; continue; }
     const word = timed ? line.wordOf[group[0]] : -1;
-    const token: Token = { sprite: textSprite(text, S, dpr * 1.12, face), x, row, w, word };
+    const token: Token = { sprite: textSprite(text, S, dpr * 1.12, face, ink), x, row, w, word };
     const span = word >= 0 ? line.words[word] : undefined;
     // Emphasis is reserved for long-held short words, as in AMLL.
     if (span && span.end - span.start >= 1000 && group.length <= 7) {
       let cx = x;
       token.chars = group.map(i => {
         const char = line.glyphs[i], cw = g.measureText(char).width;
-        const result = { sprite: textSprite(char, S, dpr * 1.25, face), x: cx };
+        const result = { sprite: textSprite(char, S, dpr * 1.25, face, ink), x: cx };
         cx += cw;
         return result;
       });
@@ -73,7 +73,7 @@ function layout(g: CanvasRenderingContext2D, line: PvLine, env: PvEnv): Layout {
   let height = rows * rowH;
   const result: Layout = { size: S, rowH, height, tokens, timed, line };
   if (env.showTranslation && line.translation) {
-    result.translation = { sprite: textSprite(line.translation, S * 0.5, dpr, themeFace(env.fontFamily, line.tface, 500)), y: height + S * 0.38 };
+    result.translation = { sprite: textSprite(line.translation, S * 0.5, dpr, themeFace(env.fontFamily, line.tface, 500), ink), y: height + S * 0.38 };
     height += S * 0.75;
   }
   result.height = height;
@@ -111,14 +111,15 @@ function drawLine(g: CanvasRenderingContext2D, item: Layout, position: number, s
   if (state.scale !== 1) g.scale(state.scale, state.scale);
   if (state.blur > 0.3 && env.motion) g.filter = `blur(${state.blur.toFixed(1)}px)`;
   // Inactive lines sit at 35 %; on the current line unsung text is 42 % and sung text is full white.
-  const unsung = 0.35 + 0.07 * active, sungAlpha = 0.35 + 0.65 * active;
+  const dim = Number(env.options.dim ?? 0.42), emphasis = env.options.glow !== false;
+  const unsung = 0.35 + (dim - 0.35) * active, sungAlpha = 0.35 + 0.65 * active;
   for (const token of item.tokens) {
     const ty = token.row * item.rowH + item.rowH / 2;
     const span = token.word >= 0 ? line.words[token.word] : undefined;
     // Sweep progress: real word timing, or the whole line lit while it is current.
     const progress = active <= 0 ? 0 : span ? clamp01((position - span.start) / Math.max(1, span.end - span.start)) : 1;
     const float = span && env.motion ? -0.05 * S * (1 - (1 - clamp01((position - span.start) / Math.max(1000, span.end - span.start))) ** 2) * active : 0;
-    if (token.chars && span && active > 0 && env.motion && progress > 0) {
+    if (token.chars && span && active > 0 && env.motion && emphasis && progress > 0) {
       const du = Math.max(1000, span.end - span.start);
       let amount = du / 2000; amount = Math.min(1.2, (amount > 1 ? Math.sqrt(amount) : amount ** 3) * 0.6);
       let glow = du / 3000; glow = Math.min(0.8, (glow > 1 ? Math.sqrt(glow) : glow ** 3) * 0.5);
@@ -129,7 +130,7 @@ function drawLine(g: CanvasRenderingContext2D, item: Layout, position: number, s
         const lit = clamp01(progress * n - i);
         blit(g, char.sprite, cx, cy, 1 + e * 0.1 * amount, 0, unsung + (sungAlpha - unsung) * lit);
         if (e * glow > 0.02) {
-          g.save(); g.shadowColor = `rgba(255,255,255,${(e * glow).toFixed(3)})`; g.shadowBlur = Math.min(0.3, glow * 0.3) * S * env.dpr;
+          g.save(); g.shadowColor = rgba(hue(env, 'ink', '#ffffff'), e * glow); g.shadowBlur = Math.min(0.3, glow * 0.3) * S * env.dpr;
           blit(g, char.sprite, cx, cy, 1 + e * 0.1 * amount, 0, e * glow * 0.6); g.restore();
         }
       });

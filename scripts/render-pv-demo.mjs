@@ -24,7 +24,7 @@ try {
     await go(main, 'plugins');
     await (await openPlugin(main, `official.renderer.pv-${style}`)).locator('[data-plugin-use]').click();
     await main.evaluate(({ color, end }) => {
-      const set = (key, value) => { const input = document.querySelector(`[data-setting="${key}"]`); if (input.type === 'checkbox') input.checked = value; else input.value = String(value); input.dispatchEvent(new Event('input', { bubbles: true })); };
+      const set = (key, value) => { const input = document.querySelector(`[data-setting="${key}"]`); if (!input) return; if (input.type === 'checkbox') input.checked = value; else input.value = String(value); input.dispatchEvent(new Event('input', { bubbles: true })); };
       for (const [key, value] of Object.entries({ fontSize: 62, fontWeight: 800, gradientEnabled: true, gradientStart: color, gradientEnd: end, backgroundOpacity: 0, showTranslation: false, showNextLine: false })) set(key, value);
       document.querySelector('[data-lyrics]').value = '[00:00.00]ねえ 今日もまた眠れないまま\n[00:03.00]二人で走り出そう\n[00:06.00]二人で走り出そう\n[00:09.00]';
       document.querySelector('[data-import]').click(); document.querySelector('[data-seek]').step = 'any';

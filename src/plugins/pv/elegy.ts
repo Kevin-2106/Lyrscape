@@ -1,7 +1,7 @@
 import { clamp01, easeInOutSine, easeOutCubic, hash, isHan, isKana, isSpace, rng } from './core';
 import type { Face } from '../typeface';
 import { blit, blitBand, sprite, type Sprite } from './paint';
-import { faceFont, type PvEnv, type PvFrame, type PvLine, type PvStyle } from './stage';
+import { faceFont, hue, type PvEnv, type PvFrame, type PvLine, type PvStyle } from './stage';
 
 // Underwater elegy: small gothic words scattered on hairlines with little wave
 // bumps, decoded in and dissolved out by pixel glitches, a giant outlined
@@ -11,6 +11,12 @@ const THEMES = {
   abyss: { ink: '#17132b', shade: 'rgba(255,255,255,0.75)', faint: 'rgba(23,19,43,' },
 };
 const punct = /^[\p{P}\p{S}]$/u;
+/** A custom ink gets the opposite shade so it stays legible on both light and dark desktops. */
+function customTheme(ink: string): typeof THEMES.foam {
+  const value = parseInt(ink.slice(1), 16), r = value >> 16, g = (value >> 8) & 255, b = value & 255;
+  const light = r * 0.299 + g * 0.587 + b * 0.114 > 140;
+  return { ink, shade: light ? THEMES.foam.shade : THEMES.abyss.shade, faint: `rgba(${r},${g},${b},` };
+}
 
 interface Chunk { sprite: Sprite; x: number; y: number; w: number; first: number; order: number }
 interface Link { x0: number; x1: number; y: number; bump: number; at: number; kind: number; to: number }
@@ -64,7 +70,7 @@ const textSprite = (text: string, size: number, k: number, color: typeof THEMES.
 
 function layout(g: CanvasRenderingContext2D, line: PvLine, env: PvEnv): Layout {
   const { width: W, height: H, dpr } = env;
-  const color = env.options.theme === 'abyss' ? THEMES.abyss : THEMES.foam;
+  const color = env.options.theme === 'abyss' ? THEMES.abyss : env.options.theme === 'custom' ? customTheme(hue(env, 'ink', '#eafff8')) : THEMES.foam;
   const random = rng(line.seed);
   const glyphs = line.glyphs.map(glyph => glyph === '\n' ? ' ' : glyph);
   const chunks = elegyChunks(glyphs, line.starts);
@@ -189,7 +195,7 @@ function glitch(g: CanvasRenderingContext2D, chunk: Chunk, amount: number, step:
 
 function draw(g: CanvasRenderingContext2D, layout: Layout, frame: PvFrame, env: PvEnv) {
   const { t, exit } = frame, S = layout.size;
-  const intensity = env.motion ? Number(env.options.glitch ?? 1) : 0;
+  const intensity = env.motion ? Number(env.options.glitch ?? 1) * Math.min(2, env.amp) : 0;
   const step = Math.floor(t / 45);
   const count = layout.chunks.length;
   const pace = Math.min(320, 1100 / Math.max(1, count));
@@ -201,7 +207,7 @@ function draw(g: CanvasRenderingContext2D, layout: Layout, frame: PvFrame, env: 
   if (layout.kanji) {
     const e = easeOutCubic(t / 700);
     const drift = env.motion ? 1 + 0.04 * clamp01(t / 6000) : 1;
-    blit(g, layout.kanji.sprite, layout.kanji.x, layout.kanji.y + (1 - e) * S * 0.4, drift, 0, e * (1 - exit));
+    blit(g, layout.kanji.sprite, layout.kanji.x, layout.kanji.y + (1 - e) * S * 0.4 * env.amp, drift, 0, e * (1 - exit));
     // Beat: the giant outline kanji throbs.
     if (frame.beat.pulse > 0.02) blit(g, layout.kanji.sprite, layout.kanji.x, layout.kanji.y + (1 - e) * S * 0.4, drift * (1 + 0.035 * frame.beat.pulse), 0, Math.min(1, frame.beat.pulse) * 0.7 * e * (1 - exit));
   }

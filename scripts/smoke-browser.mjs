@@ -1,7 +1,7 @@
 import { chromium, expect } from '@playwright/test';
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
-import { go } from './lib/nav.mjs';
+import { go, inspectorTab } from './lib/nav.mjs';
 
 const output = process.env.LYRSCAPE_QA_DIR ?? path.resolve('qa');
 await mkdir(output, { recursive: true });
@@ -20,17 +20,22 @@ try {
   await expect(page.locator('.lyric-current')).toHaveText('普通文字，自己的风景。');
   await go(page, 'style');
   await input('[data-setting="fontSize"]', 52);
+  await inspectorTab(page, 'color');
   await page.locator('[data-setting="color"][type="text"]').fill('rebeccapurple');
   await expect(page.locator('.lyric-current')).toHaveCSS('color', 'rgb(102, 51, 153)');
   await expect(page.locator('#style-preview')).toHaveCSS('font-size', '52px');
+  await inspectorTab(page, 'font');
   await page.locator('[data-font-select]').selectOption('custom');
   await page.locator('[data-setting="fontFamily"]').fill('"Microsoft YaHei", sans-serif');
+  await inspectorTab(page, 'color');
   await page.locator('[data-setting="gradientEnabled"]').check();
+  await expect(page.locator('[data-setting="gradientAngle"]')).toBeEnabled();
   await input('[data-setting="gradientAngle"]', 135);
   await expect(page.locator('.lyric-current')).toHaveCSS('color', 'rgba(0, 0, 0, 0)');
-  const paint = await page.locator('.lyric-current').evaluate(element => getComputedStyle(element).backgroundImage);
-  if (!paint.includes('135deg')) throw Error(`Gradient did not render: ${paint}`);
+  await expect.poll(() => page.locator('.lyric-current').evaluate(element => getComputedStyle(element).backgroundImage), { message: 'gradient renders at 135deg' }).toContain('135deg');
   await page.reload();
+  await go(page, 'style');
+  await inspectorTab(page, 'color');
   await expect(page.locator('[data-setting="gradientEnabled"]')).toBeChecked();
   await expect(page.locator('#style-preview')).toHaveCSS('font-size', '52px');
   await page.screenshot({ path: path.join(output, 'lyrscape-settings.png'), fullPage: true });

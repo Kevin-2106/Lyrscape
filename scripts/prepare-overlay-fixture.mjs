@@ -16,6 +16,7 @@ try {
   await main.evaluate(({ lineOnly, pvStyle, rendererId }) => {
     const set = (selector, value, type = 'input') => {
       const input = document.querySelector(selector);
+      if (!input) return; // theme sections exist only for renderers that follow them
       if (input.type === 'checkbox') input.checked = value; else input.value = String(value);
       input.dispatchEvent(new Event(type, { bubbles: true }));
     };

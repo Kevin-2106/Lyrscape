@@ -1,5 +1,5 @@
 import type { Plugin } from '../kernel/host';
-import type { ConfigField, PluginCategory, PluginInfo, PluginManifest, PluginOrigin } from '../sdk/types';
+import type { ConfigField, PluginCategory, PluginInfo, PluginManifest, PluginOrigin, ThemeUse } from '../sdk/types';
 
 export interface RegistryEntry { info: PluginInfo; plugin: Plugin; origin: PluginOrigin }
 
@@ -7,6 +7,8 @@ export interface RegistryEntry { info: PluginInfo; plugin: Plugin; origin: Plugi
 export const PLUGIN_ID = /^[a-z0-9][a-z0-9-]*(\.[a-z0-9][a-z0-9-]*){1,5}$/;
 const SERVICE = /^renderer\.[a-z0-9][a-z0-9.-]*@\d{1,4}$/;
 const FIELD_KEY = /^[A-Za-z][\w-]{0,31}$/;
+const HEX = /^#[0-9a-f]{6}$/i;
+const THEME_USES: ThemeUse[] = ['font', 'color', 'nextLine'];
 const CATEGORIES: PluginCategory[] = ['playback-adapter', 'audio-provider', 'lyric-parser', 'timeline-provider', 'renderer', 'theme', 'effect', 'surface', 'settings'];
 /** Categories a rescan may add; others need host wiring that only a rebuild provides. */
 export const ADDABLE_CATEGORIES: PluginCategory[] = ['renderer', 'effect'];
@@ -22,6 +24,7 @@ function field(input: unknown, index: number): ConfigField {
   if (typeof value.key !== 'string' || !FIELD_KEY.test(value.key)) throw Error(`manifest.fields[${index}].key 无效`);
   const result: ConfigField = { key: value.key, label: text(value.label, `fields[${index}].label`, 40)!, type: value.type as ConfigField['type'], default: false,
     description: text(value.description, `fields[${index}].description`, 200, true) };
+  if (value.group !== undefined) result.group = text(value.group, `fields[${index}].group`, 8)!;
   if (value.type === 'boolean') {
     if (typeof value.default !== 'boolean') throw Error(`${value.key}: 布尔配置的默认值必须是 true / false`);
     result.default = value.default;
@@ -40,6 +43,9 @@ function field(input: unknown, index: number): ConfigField {
     });
     if (!result.options.some(option => option.value === value.default)) throw Error(`${value.key}: 默认值不在选项中`);
     result.default = value.default as string;
+  } else if (value.type === 'color') {
+    if (typeof value.default !== 'string' || !HEX.test(value.default)) throw Error(`${value.key}: 颜色配置的默认值必须是 #rrggbb`);
+    result.default = value.default.toLowerCase();
   } else throw Error(`${value.key}: 不支持的配置类型`);
   if (result.description === undefined) delete result.description;
   return result;
@@ -76,6 +82,11 @@ export function validateManifest(input: unknown, expectedId: string): PluginMani
     const keys = new Set(manifest.fields.map(f => f.key));
     if (keys.size !== manifest.fields.length) throw Error('manifest.fields 的 key 不能重复');
   }
+  if (value.theme !== undefined) {
+    if (category !== 'renderer') throw Error('只有渲染器可以声明 theme');
+    if (!Array.isArray(value.theme) || value.theme.some(use => !THEME_USES.includes(use as ThemeUse))) throw Error('manifest.theme 只能包含 font / color / nextLine');
+    manifest.theme = [...new Set(value.theme as ThemeUse[])];
+  }
   if (value.surfaces !== undefined) {
     if (!Array.isArray(value.surfaces) || !value.surfaces.length || value.surfaces.some(s => s !== 'control' && s !== 'overlay')) throw Error('manifest.surfaces 只能包含 control / overlay');
     manifest.surfaces = [...new Set(value.surfaces as ('control' | 'overlay')[])];
@@ -91,13 +102,13 @@ export const infoOf = (manifest: PluginManifest, essential = false): PluginInfo 
   id: manifest.id, name: manifest.name, description: manifest.description, category: manifest.category,
   version: manifest.version ?? '0.1.0', ...(essential ? { essential } : {}),
   ...(manifest.rendererService ? { rendererService: manifest.rendererService } : {}), ...(manifest.fields ? { fields: manifest.fields } : {}),
-  ...Object.fromEntries((['surfaces', 'author', 'homepage', 'license', 'tags'] as const).filter(key => manifest[key] !== undefined).map(key => [key, manifest[key]])),
+  ...Object.fromEntries((['surfaces', 'theme', 'author', 'homepage', 'license', 'tags'] as const).filter(key => manifest[key] !== undefined).map(key => [key, manifest[key]])),
 });
 
 /** Comparable metadata in a fixed shape (property order and implied defaults ignored), so a rescan only reports real changes. */
 export const metadataKey = (info: PluginInfo) => JSON.stringify([info.name, info.description, info.category, info.version, info.rendererService ?? '',
-  info.surfaces ?? [], info.author ?? '', info.homepage ?? '', info.license ?? '', info.tags ?? [],
-  (info.fields ?? []).map(f => [f.key, f.label, f.description ?? '', f.type, f.default, f.min ?? null, f.max ?? null,
+  info.surfaces ?? [], info.theme ?? null, info.author ?? '', info.homepage ?? '', info.license ?? '', info.tags ?? [],
+  (info.fields ?? []).map(f => [f.key, f.label, f.description ?? '', f.type, f.group ?? '', f.default, f.min ?? null, f.max ?? null,
     f.type === 'number' ? f.step ?? 1 : null, (f.options ?? []).map(o => [o.value, o.label])])]);
 
 /**

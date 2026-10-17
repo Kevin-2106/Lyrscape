@@ -34,9 +34,18 @@ export type PluginCategory = 'playback-adapter' | 'audio-provider' | 'lyric-pars
 export type ConfigValue = string | number | boolean;
 export interface ConfigField {
   key: string; label: string; description?: string;
-  type: 'number' | 'select' | 'boolean'; default: ConfigValue;
+  /** `color` values are #rrggbb. */
+  type: 'number' | 'select' | 'boolean' | 'color'; default: ConfigValue;
   min?: number; max?: number; step?: number; options?: { value: string; label: string }[];
+  /** Inspector tab the option appears on (e.g. 构图 / 动效 / 颜色 / 字体); ungrouped options share one tab. */
+  group?: string;
 }
+/**
+ * Shared text settings a renderer follows besides the always-shown 字号 / 背景 / 译文:
+ * `font` (font family, weight, line height, alignment), `color` (colours, gradient,
+ * shadow) and `nextLine`. Omitted means all of them (the original contract).
+ */
+export type ThemeUse = 'font' | 'color' | 'nextLine';
 export interface PluginPreferences {
   rendererId: string;
   enabled: Record<string, boolean>;
@@ -47,6 +56,7 @@ export interface PluginCredits { author?: string; homepage?: string; license?: s
 export interface PluginInfo extends PluginCredits {
   id: string; name: string; description: string; version: string; category: PluginCategory;
   essential?: boolean; rendererService?: string; fields?: ConfigField[]; surfaces?: ('control' | 'overlay')[];
+  theme?: ThemeUse[];
 }
 /**
  * Display and configuration metadata a plugin module carries with its code
@@ -56,6 +66,8 @@ export interface PluginInfo extends PluginCredits {
 export interface PluginManifest extends PluginCredits {
   id: string; name: string; description: string; category: PluginCategory; version?: string;
   rendererService?: string; fields?: ConfigField[];
+  /** Shared text settings the renderer uses (renderers only); omitted means all. */
+  theme?: ThemeUse[];
   /** Windows that run the plugin; defaults to both for renderers and effects, otherwise the control window. */
   surfaces?: ('control' | 'overlay')[];
 }

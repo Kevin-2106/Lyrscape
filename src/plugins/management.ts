@@ -45,6 +45,7 @@ export function normalizeConfig(fields: ConfigField[], input: unknown): Record<s
     let normalized = field.default;
     if (field.type === 'boolean' && typeof value === 'boolean') normalized = value;
     if (field.type === 'select' && field.options?.some(option => option.value === value)) normalized = value as string;
+    if (field.type === 'color' && typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value)) normalized = value.toLowerCase();
     if (field.type === 'number' && typeof value === 'number' && Number.isFinite(value)) {
       const min = field.min ?? 0, max = field.max ?? Number.MAX_SAFE_INTEGER, step = field.step ?? 1;
       normalized = Math.min(max, Math.max(min, min + Math.round((value - min) / step) * step));
@@ -298,7 +299,7 @@ export function createPluginManagement(host: PluginHost, store: Store<AppState>,
       if (info.essential || !reloader?.exportBundle || !reloader.exportable?.(id, origin)) throw Error('这个插件随应用内置，没有可导出的代码；开发模式下可以导出');
       const bundle = await reloader.exportBundle(id, origin);
       const manifest: PluginManifest = { id: info.id, name: info.name, description: info.description, category: info.category, version: info.version };
-      for (const key of ['rendererService', 'fields', 'surfaces', 'author', 'homepage', 'license', 'tags'] as const) if (info[key] !== undefined) Object.assign(manifest, { [key]: info[key] });
+      for (const key of ['rendererService', 'fields', 'theme', 'surfaces', 'author', 'homepage', 'license', 'tags'] as const) if (info[key] !== undefined) Object.assign(manifest, { [key]: info[key] });
       return createPackage(manifest, bundle.javascript, bundle.css, store.get().plugins.configs[id]);
     },
   };

@@ -19,4 +19,9 @@ export const fontCatalog: Record<string, (() => Promise<{ default: string }>)[]>
   'Noto Serif TC': [() => import('@fontsource/noto-serif-tc/700.css?inline')],
   'Huninn': [() => import('@fontsource/huninn/400.css?inline')],
   'LXGW WenKai TC': [() => import('@fontsource/lxgw-wenkai-tc/400.css?inline')],
+  'M PLUS Rounded 1c': [() => import('@fontsource/m-plus-rounded-1c/500.css?inline'), () => import('@fontsource/m-plus-rounded-1c/800.css?inline'), () => import('@fontsource/m-plus-rounded-1c/900.css?inline')],
+  'Fusion Pixel 12px Proportional SC': [() => import('@fontsource/fusion-pixel-12px-proportional-sc/400.css?inline')],
+  'Fusion Pixel 12px Proportional TC': [() => import('@fontsource/fusion-pixel-12px-proportional-tc/400.css?inline')],
+  'Fusion Pixel 12px Proportional JP': [() => import('@fontsource/fusion-pixel-12px-proportional-jp/400.css?inline')],
+  'Press Start 2P': [() => import('@fontsource/press-start-2p/400.css?inline')],
 };

@@ -1,7 +1,10 @@
-import type { AppState, PluginStatus } from '../../sdk/types';
+import type { AppState, ConfigField, PluginStatus } from '../../sdk/types';
+import { defaults } from '../../plugins/theme';
 import type { UiServices } from '../context';
+import { icons } from '../icons';
 import { renderConfigFields, type ConfigFieldsView } from '../kit/config-fields';
 import { html, q } from '../kit/dom';
+import { mountTextPanel, sectionKeys, type ThemeSection } from './text-panel';
 
 /** A stable two-color tile per plugin, so lists read at a glance without screenshots. */
 export function swatch(id: string): string {
@@ -13,7 +16,7 @@ export function swatch(id: string): string {
 }
 
 interface View { render(state: AppState): void; dispose(): void }
-const keyOf = (plugins: PluginStatus[]) => JSON.stringify(plugins.map(p => [p.id, p.name, p.description, p.fields, p.active, p.category, p.origin]));
+const keyOf = (plugins: PluginStatus[]) => JSON.stringify(plugins.map(p => [p.id, p.name, p.description, p.fields, p.theme, p.active, p.category, p.origin]));
 
 /**
  * Re-renders `build` only when the plugin list or metadata changes and `sync` when
@@ -78,31 +81,137 @@ export function mountRendererList(host: HTMLElement, { ctx, perform }: UiService
   return { render: view.render, dispose() { controller.abort(); view.unsubscribe(); list.remove(); } };
 }
 
-/** Options of the selected renderer. */
-export function mountRendererOptions(host: HTMLElement, { ctx, perform }: UiServices): View {
-  const panel = html(`<section class="inspector-section">
-      <header class="section-head"><h3 data-renderer-options-title>选项</h3><button class="button-link" data-renderer-reset>恢复默认</button></header>
-      <div class="option-list" data-renderer-options></div>
-      <p class="helper" data-renderer-options-empty hidden>这个渲染器没有额外选项。字体、颜色和显示细节在「文字」页签。</p>
-    </section>`);
-  host.append(panel);
+const GROUP_ORDER = ['选项', '构图', '动效', '特效', '字体', '颜色', '显示'];
+const TAB_IDS: Record<string, string> = { 选项: 'options', 构图: 'layout', 动效: 'motion', 特效: 'effects', 颜色: 'color', 字体: 'font', 显示: 'display' };
+const SECTION_TAB: Record<ThemeSection, string> = { font: '字体', color: '颜色', display: '显示' };
+interface InspectorTab { id: string; label: string; fields: ConfigField[]; sections: ThemeSection[] }
+
+/**
+ * Tabs for one renderer: its options grouped by `field.group`, plus the shared
+ * text-theme sections it actually follows (字体 / 颜色 only for theme-driven
+ * renderers; 显示 for every renderer) merged into the tab of the same name.
+ */
+export function inspectorTabs(plugin: Pick<PluginStatus, 'fields' | 'theme'> | undefined): InspectorTab[] {
+  const tabs = new Map<string, InspectorTab>();
+  const tab = (label: string) => {
+    let entry = tabs.get(label);
+    if (!entry) { entry = { id: TAB_IDS[label] ?? `group-${tabs.size}`, label, fields: [], sections: [] }; tabs.set(label, entry); }
+    return entry;
+  };
+  for (const field of plugin?.fields ?? []) tab(field.group ?? '选项').fields.push(field);
+  const uses = plugin?.theme ?? ['font', 'color', 'nextLine'];
+  const sections: ThemeSection[] = [...uses.includes('font') ? ['font' as const] : [], ...uses.includes('color') ? ['color' as const] : [], 'display'];
+  for (const section of sections) tab(SECTION_TAB[section]).sections.push(section);
+  const rank = (label: string) => { const index = GROUP_ORDER.indexOf(label); return index < 0 ? GROUP_ORDER.length - 1.5 : index; };
+  return [...tabs.values()].sort((a, b) => rank(a.label) - rank(b.label));
+}
+
+export interface InspectorView extends View { reveal(target: string): boolean }
+
+/**
+ * Settings of the selected renderer, one tab per category. Rebuilt only when the
+ * renderer or its option metadata changes; preference updates just sync values.
+ */
+export function mountRendererInspector(host: HTMLElement, services: UiServices): InspectorView {
+  const { ctx, perform } = services;
+  const tablist = html(`<div class="tabs inspector-tabs" role="tablist" aria-label="设置分类"></div>`);
+  const body = html(`<div class="inspector-body"></div>`);
+  const intro = html(`<p class="inspector-intro" data-renderer-intro></p>`);
+  host.append(tablist, body);
   const controller = new AbortController(), { signal } = controller;
   const api = () => ctx.pluginManagement;
-  const options = q(panel, '[data-renderer-options]');
-  let optionsFor = '', optionsView: ConfigFieldsView | undefined;
-  q(panel, '[data-renderer-reset]').addEventListener('click', () => void perform(() => api().resetConfig(ctx.getState().plugins.rendererId), '已恢复默认选项'), { signal });
-  const view = structured(ctx, () => api().list().filter(p => p.rendererService), () => { optionsFor = ''; }, state => {
-    const current = state.plugins.rendererId, plugin = api().list().find(p => p.id === current);
-    if (optionsFor !== current) {
-      optionsFor = current;
-      optionsView = plugin?.fields?.length ? renderConfigFields(options, plugin, patch => void perform(() => api().configure(current, patch)), signal) : (options.replaceChildren(), undefined);
-      q(panel, '[data-renderer-options-title]').textContent = plugin ? `${plugin.name} 选项` : '选项';
+  let views: { tab: InspectorTab; config?: ConfigFieldsView; text?: ReturnType<typeof mountTextPanel>; panel: HTMLElement; reset: HTMLButtonElement }[] = [];
+  let builtFor = '', selected = 'options';
+  const select = (id: string) => {
+    const known = views.find(view => view.tab.id === id) ?? views[0];
+    if (!known) return;
+    selected = known.tab.id;
+    tablist.querySelectorAll<HTMLButtonElement>('[data-inspector-tab]').forEach(button => {
+      const on = button.dataset.inspectorTab === selected;
+      button.setAttribute('aria-selected', String(on)); button.tabIndex = on ? 0 : -1;
+    });
+    for (const view of views) view.panel.hidden = view.tab.id !== selected;
+  };
+  const clear = () => { for (const view of views) view.text?.dispose(); views = []; tablist.replaceChildren(); body.replaceChildren(); };
+  const build = (state: AppState) => {
+    clear();
+    const id = state.plugins.rendererId, plugin = api().list().find(p => p.id === id);
+    const tabs = inspectorTabs(plugin);
+    intro.textContent = plugin?.theme && !plugin.theme.length ? '这个渲染器自带字体与配色；共享的文字设置只有「显示」页。' : '';
+    body.append(intro);
+    for (const tab of tabs) {
+      const button = html<HTMLButtonElement>(`<button role="tab" type="button"></button>`);
+      button.dataset.inspectorTab = tab.id; button.textContent = tab.label;
+      button.id = `inspector-tab-${tab.id}`;
+      tablist.append(button);
+      const panel = html(`<div role="tabpanel" class="inspector-panel"></div>`);
+      panel.dataset.inspectorPanel = tab.id; panel.setAttribute('aria-labelledby', button.id);
+      let config: ConfigFieldsView | undefined, text: ReturnType<typeof mountTextPanel> | undefined;
+      if (tab.fields.length && plugin) {
+        const section = html(`<section class="inspector-section"><div class="option-list" data-renderer-options></div></section>`);
+        // The tab names the category; a heading only separates renderer options from shared ones.
+        if (tab.sections.length) {
+          const head = html(`<header class="section-head"><h3></h3></header>`);
+          q(head, 'h3').textContent = `${tab.label} · 渲染器`; section.prepend(head);
+        }
+        panel.append(section);
+        config = renderConfigFields(q(section, '[data-renderer-options]'), { ...plugin, fields: tab.fields }, patch => void perform(() => api().configure(id, patch)), signal);
+      }
+      if (tab.sections.length) {
+        const holder = html('<div></div>'); panel.append(holder);
+        text = mountTextPanel(holder, services, tab.sections, !plugin?.theme || plugin.theme.includes('nextLine'));
+      }
+      const footer = html<HTMLElement>(`<div class="form-footer"><span class="helper">自动保存，同步到桌面歌词</span><button class="button-secondary" data-inspector-reset>${icons.reset}恢复本页默认</button></div>`);
+      panel.append(footer);
+      const reset = q<HTMLButtonElement>(footer, '[data-inspector-reset]');
+      reset.addEventListener('click', () => void perform(async () => {
+        if (tab.fields.length) await api().configure(id, Object.fromEntries(tab.fields.map(field => [field.key, field.default])));
+        const keys = tab.sections.flatMap(section => sectionKeys[section]);
+        if (keys.length) await ctx.updateSettings(Object.fromEntries(keys.map(key => [key, defaults[key]])));
+      }, '已恢复本页默认值'), { signal });
+      body.append(panel);
+      views.push({ tab, config, text, panel, reset });
     }
-    q(panel, '[data-renderer-options-empty]').hidden = Boolean(plugin?.fields?.length);
-    q(panel, '[data-renderer-reset]').hidden = !plugin?.fields?.length;
-    optionsView?.sync(state.plugins.configs[current]);
+    select(selected);
+  };
+  tablist.addEventListener('click', event => {
+    const button = (event.target as Element).closest<HTMLButtonElement>('[data-inspector-tab]');
+    if (button) select(button.dataset.inspectorTab!);
+  }, { signal });
+  tablist.addEventListener('keydown', event => {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+    const index = views.findIndex(view => view.tab.id === selected);
+    if (index < 0) return;
+    select(views[(index + (event.key === 'ArrowRight' ? 1 : -1) + views.length) % views.length].tab.id);
+    tablist.querySelector<HTMLButtonElement>(`[data-inspector-tab="${selected}"]`)?.focus();
+  }, { signal });
+  const refresh = (state: AppState) => {
+    const stored = state.plugins.configs[builtFor] ?? {};
+    for (const item of views) {
+      item.config?.sync(state.plugins.configs[builtFor]);
+      item.text?.render(state);
+      item.reset.disabled = !item.tab.fields.some(field => stored[field.key] !== undefined && stored[field.key] !== field.default)
+        && !item.tab.sections.some(section => sectionKeys[section].some(key => state.settings[key] !== defaults[key]));
+    }
+  };
+  const view = structured(ctx, () => api().list().filter(p => p.rendererService), () => { builtFor = ''; }, state => {
+    if (builtFor !== state.plugins.rendererId) { builtFor = state.plugins.rendererId; build(state); }
+    refresh(state);
   });
-  return { render: view.render, dispose() { controller.abort(); view.unsubscribe(); panel.remove(); } };
+  // Shared text settings are not plugin preferences; keep their sections current too.
+  let settings: AppState['settings'] | undefined;
+  return {
+    render(state) {
+      view.render(state);
+      if (state.settings !== settings) { settings = state.settings; refresh(state); }
+    },
+    reveal(target) {
+      const id = target === 'text' ? (views.find(item => item.tab.id === 'font') ?? views.find(item => item.tab.id === 'display'))?.tab.id : target === 'options' ? views[0]?.tab.id : target;
+      if (!id || !views.some(item => item.tab.id === id)) return false;
+      select(id); return true;
+    },
+    dispose() { controller.abort(); view.unsubscribe(); clear(); tablist.remove(); body.remove(); },
+  };
 }
 
 /** Effect plugins as cards: a switch each, and their options while running. */

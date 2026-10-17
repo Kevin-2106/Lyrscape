@@ -21,7 +21,11 @@
 | mincho（挽歌巨字） | Shippori Mincho | Noto Serif SC | Noto Serif TC |
 | heavy（吸血鬼） | Dela Gothic One | 站酷庆科黄油体 | Noto Sans TC Black |
 | code（合成谱） | M PLUS 1 Code | Noto Sans SC | Noto Sans TC |
+| rounded（一起出发） | M PLUS Rounded 1c 500 / 800 / 900 | Noto Sans SC | Noto Sans TC |
+| pixel（晴空终端 III、游戏开发部） | Fusion Pixel 12px Proportional JP | Fusion Pixel 12px Proportional SC | Fusion Pixel 12px Proportional TC |
 
+- arcade（游戏开发部 HUD）：Press Start 2P，只画拉丁文字，非拉丁文字改用 pixel。
+- PV 的「字体」选项把中日文角色整体替换为上表中的另一种角色；拉丁专用角色（mono / script / serif / arcade）不受影响。
 - 拉丁专用角色：译文的 Playfair Display / EB Garamond 斜体与 HUD 的 Share Tech Mono 只画拉丁文字；中文 / 日文译文与曲名自动改用同语言的 hand / mincho / code 字体（不再斜体）。
 - 韩文使用系统 Malgun Gothic / Batang（未打包）。
 - 字重取打包字重中最接近的一个，不让浏览器合成粗体。
@@ -43,7 +47,7 @@
 ## 开发
 
 - PV 风格不再引用固定字体族：`PvLine.face(role, weight?, style?)` / `tface(...)` 返回该行 / 译文的 `{ family, weight, style }`，并请求加载恰好这段文字的子集；`faceFont(face, size)` 生成 canvas font 字符串。`PvStyle.fonts` 只列固定的拉丁 / HUD 字体。
-- 字体 CSS 由 `src/plugins/font-catalog.ts` 声明本地动态 chunk；`font-assets.ts` 按实际字符注册子集，`pv/fonts.ts` 等待注册后再加载字节。构建先运行 `scripts/build-font-manifest.mjs` 生成完整覆盖元数据，缺字判定不依赖已注册的局部字面。普通文字的自定义字体也走这个入口。
+- 字体 CSS 由 `src/plugins/font-catalog.ts` 声明本地动态 chunk；`font-assets.ts` 按实际字符注册子集，`pv/fonts.ts` 等待注册后再加载字节。构建先运行 `scripts/build-font-manifest.mjs` 生成完整覆盖元数据，缺字判定不依赖已注册的局部字面。Fusion Pixel 的 CSS 没有 `unicode-range`，构建脚本改为直接读取 WOFF 的 cmap 表（format 12，退回 format 4）得到覆盖范围（约 3.1 万个码位）。普通文字的自定义字体也走这个入口。
 - 热重载插件包把 `@fontsource/*` 与 `lxgw-wenkai-webfont/*` 映射为空模块，复用宿主共享字体 registry；旧 bundle 按引用字体族加载兼容 CSS，不覆盖用户本地修改。2026-10-16 的常驻内存对比见 [第二轮优化](memory-footprint.md)。
 
 ## 代价与验证

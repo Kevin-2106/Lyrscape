@@ -1,14 +1,21 @@
 import { breakRows, clamp01, easeOutCubic, hash, isSpace, rng, splitAt } from './core';
 import { detectLang, faceFor, type Face } from '../typeface';
 import { requestFonts } from './fonts';
-import { blit, font, sprite, type Sprite } from './paint';
-import { faceFont, type PvEnv, type PvFrame, type PvLine, type PvScene, type PvStyle } from './stage';
+import { blit, font, mix, rgba, sprite, type Sprite } from './paint';
+import { faceFont, hue, type PvEnv, type PvFrame, type PvLine, type PvScene, type PvStyle } from './stage';
 
 // Synthesis: a music-theory HUD. A code-like header names the section, a
 // countdown runs to the next line, the lyric types in with a cursor, and the
 // bottom row lights the pitch classes actually sounding (live PCM chroma).
 // Spectrum bars and an oscilloscope frame the edges; colour shards drift by.
-const INK = '#f3f0ff', LAVENDER = '#b7a6ff', GLOW = 'rgba(150,128,255,0.95)', SHADE = 'rgba(12,8,36,0.8)';
+// 文字 / 光晕 options; set before each layout and backdrop (option changes rebuild layouts).
+let INK = '#f3f0ff', LAVENDER = '#b7a6ff', GLOW = 'rgba(150,128,255,0.95)';
+const SHADE = 'rgba(12,8,36,0.8)';
+function usePalette(env: PvEnv) {
+  INK = hue(env, 'ink', '#f3f0ff');
+  const glow = hue(env, 'glow', '#9680ff');
+  GLOW = rgba(glow, 0.95); LAVENDER = mix(glow, '#ffffff', 0.35);
+}
 const SHARDS = ['#ff3b6b', '#ffb02e', '#3be8ff', '#8a5cff', '#ff6bd6', '#5cff9d', '#ffe14a'];
 const NOTES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const SCRAMBLE = '01<>/\\{}[]=+*#%';
@@ -97,9 +104,9 @@ function draw(g: CanvasRenderingContext2D, layout: Layout, frame: PvFrame, env: 
     if (tg < 0) return;
     typed = i; lastX = glyph.x + glyph.w / 2; lastY = glyph.y;
     // Spread apart and fade on exit, like a buffer being cleared.
-    const spread = (i - (n - 1) / 2) * exit * S * 0.12;
+    const spread = (i - (n - 1) / 2) * exit * S * 0.12 * env.amp;
     const alpha = 1 - exit;
-    if (tg < 70 && env.motion) {
+    if (tg < 70 * Math.min(2, env.amp) && env.motion) {
       // Two frames of scrambled code before the character settles.
       const r = rng(hash(`${layout.seed}:${i}:${Math.floor(tg / 35)}`))();
       g.save(); g.globalAlpha = alpha * 0.8; g.font = font(400, S * 0.9, MONO); g.textAlign = 'center'; g.textBaseline = 'middle';
@@ -108,13 +115,14 @@ function draw(g: CanvasRenderingContext2D, layout: Layout, frame: PvFrame, env: 
     }
     const sung = frame.sung(glyph.index);
     const bright = sung < 0 ? 1 : 0.5 + 0.5 * clamp01(sung * 3);
-    blit(g, glyph.sprite, glyph.x + spread, glyph.y, 1 + 0.04 * frame.beat.pulse, 0, alpha * bright * clamp01((tg - 70) / 90 + 0.4));
+    blit(g, glyph.sprite, glyph.x + spread, glyph.y, 1 + 0.04 * frame.beat.pulse, 0, alpha * bright * clamp01((tg - 70 * Math.min(2, env.amp)) / 90 + 0.4));
   });
   // Block cursor after the last typed character; it blinks once typing has finished.
   const done = typed === n - 1 && t > 60 + n * pace + 200;
   if (exit === 0 && n && (!done || Math.floor(t / 530) % 2 === 0) && env.motion) {
-    g.fillStyle = 'rgba(243,240,255,0.85)';
+    g.fillStyle = INK; g.globalAlpha = 0.85;
     g.fillRect(lastX + S * 0.08, lastY - layout.cursorH / 2, S * 0.42, layout.cursorH);
+    g.globalAlpha = 1;
   }
   if (layout.translation) blit(g, layout.translation.sprite, layout.translation.x, layout.translation.y, 1, 0, easeOutCubic((t - 300) / 400) * (1 - exit));
 }
@@ -208,5 +216,7 @@ export const synthStyle: PvStyle<Layout> = {
   id: 'synth', exitMs: 320, audio: true,
   fonts: [font(400, 32, MONO)],
   height: (size, translation) => size * 3.3 + (translation ? size * 0.45 : 0),
-  layout, draw, backdrop,
+  layout: (g, line, env) => { usePalette(env); return layout(g, line, env); },
+  draw,
+  backdrop: (g, frame, env) => { usePalette(env); backdrop(g, frame, env); },
 };

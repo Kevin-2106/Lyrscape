@@ -45,12 +45,14 @@ const paint = target => target.locator(target === page ? '#lyrics-preview canvas
   return { alpha, signature, width: canvas.width, height: canvas.height };
 });
 const stable = async target => {
-  // Fonts can finish loading between samples; wait until two consecutive samples agree.
-  let previous = await paint(target);
-  for (let i = 0; i < 20; i++) {
+  // Fonts can finish loading between samples (a face's first load through the dev
+  // server can take a second); wait until the frame stays the same for ~0.6 s.
+  let previous = await paint(target), same = 0;
+  for (let i = 0; i < 40; i++) {
     await target.waitForTimeout(120);
     const next = await paint(target);
-    if (next.signature === previous.signature) return next;
+    same = next.signature === previous.signature ? same + 1 : 0;
+    if (same >= 5) return next;
     previous = next;
   }
   return previous;
@@ -67,7 +69,8 @@ try {
     overlay = context.pages().find(page => page.url().includes('surface=overlay'));
   } else { overlay = await context.newPage(); await overlay.goto(`${base}/?surface=overlay`); }
   const report = [];
-  for (const style of ['pop', 'letter', 'elegy', 'vamp', 'synth', 'halo', 'halo2']) {
+  // PV_STYLES=halo3,azure checks a subset.
+  for (const style of process.env.PV_STYLES?.split(',') ?? ['pop', 'letter', 'elegy', 'vamp', 'synth', 'halo', 'halo2', 'halo3', 'azure', 'gamedev']) {
     console.log(`Checking ${style}: paint, timing, sync`);
     const card = page.locator(`[data-plugin-detail][data-plugin-id="official.renderer.pv-${style}"]`);
     await openPlugin(page, `official.renderer.pv-${style}`);
@@ -99,7 +102,7 @@ try {
     await configure(card, 'scale', 1.2);
     await configure(card, 'motion', false);
     // Synthesis' and Halo's HUDs show a live clock and countdown (information, not animation); hide it for this check.
-    if (style === 'synth' || style.startsWith('halo')) await configure(card, 'hud', false);
+    if (style === 'synth' || style === 'gamedev' || style.startsWith('halo')) await configure(card, 'hud', false);
     await seek(70); const still = await stable(page);
     await seek(1500); expect((await stable(page)).signature, 'motion off draws the settled composition').toBe(still.signature);
     await configure(card, 'motion', true);
@@ -109,7 +112,7 @@ try {
       await seek(1500); expect((await stable(page)).signature, 'reduced motion is static').toBe(reduced.signature);
       await page.emulateMedia({ reducedMotion: 'no-preference' });
     }
-    if (style === 'synth' || style.startsWith('halo')) await configure(card, 'hud', true);
+    if (style === 'synth' || style === 'gamedev' || style.startsWith('halo')) await configure(card, 'hud', true);
     console.log(`Checking ${style}: reload, disable and reset`);
     await page.reload(); await expect(page.locator('#lyrics-preview')).toHaveAttribute('data-pv-style', style);
     await expect(card.locator('[data-plugin-config="scale"]')).toHaveValue('1.2');
@@ -147,6 +150,6 @@ try {
   }
   if (errors.length) throw Error(errors.join('\n'));
   await writeFile(path.join(output, native ? 'native-report.json' : 'report.json'), JSON.stringify(report, null, 2));
-  console.log(`PASS: ${native ? 'WebView2' : 'Edge'} seven PV plugins painted on canvas, entrance/hold/exit, paused clock, seek determinism, overlay line sync, hero/caption choice, config persistence, motion off, disable fallback${native ? '' : ', reduced motion, 320/520/1100px, word timing and 10k grapheme budget'}.`);
+  console.log(`PASS: ${native ? 'WebView2' : 'Edge'} ${process.env.PV_STYLES ?? 'ten'} PV plugins painted on canvas, entrance/hold/exit, paused clock, seek determinism, overlay line sync, hero/caption choice, config persistence, motion off, disable fallback${native ? '' : ', reduced motion, 320/520/1100px, word timing and 10k grapheme budget'}.`);
   if (native) await page.evaluate(() => window.__TAURI_INTERNALS__.invoke('overlay_update', { visible: false, clickThrough: false, alwaysOnTop: true }));
 } finally { await browser.close(); }

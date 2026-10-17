@@ -23,9 +23,12 @@ export interface PvLine {
 }
 /** Canvas font string for a face. */
 export const faceFont = (face: Face, size: number) => font(face.weight, size, face.family, face.style);
-function faceRequester(text: string, lang: Lang) {
+/** Roles that only draw Latin HUD text; the 字体 option never replaces them. */
+const LATIN_ROLES = new Set<Role>(['mono', 'script', 'serif', 'arcade']);
+function faceRequester(text: string, lang: Lang, override?: Role) {
   const cache = new Map<string, Face>();
-  return (role: Role, weight = 400, style = 'normal') => {
+  return (requested: Role, weight = 400, style = 'normal') => {
+    const role = override && !LATIN_ROLES.has(requested) ? override : requested;
     const key = `${role}\u0000${weight}\u0000${style}`;
     let face = cache.get(key);
     if (!face) { face = faceFor(role, lang, text, weight, style); cache.set(key, face); }
@@ -38,7 +41,14 @@ export interface PvEnv {
   options: Record<string, ConfigValue>; motion: boolean; showTranslation: boolean;
   /** The theme's font family, for styles that follow the user's font. */
   fontFamily: string;
+  /** 动效强度: scales entrance travel, overshoot, shake and particle spread (1 = the reference PV). */
+  amp: number;
 }
+/** A style colour option (`#rrggbb`), or the reference colour when unset. */
+export const hue = (env: PvEnv, key: string, fallback: string) => {
+  const value = env.options[key];
+  return typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value) ? value : fallback;
+};
 export interface PvFrame {
   /** Milliseconds since the line started (huge when motion is off, so entrances are settled). */
   t: number;
@@ -82,6 +92,8 @@ export interface PvStyle<L = unknown> {
   audio?: boolean;
   /** Drawn once per frame beneath the lines (HUDs, ambient particles); `current` is the line being sung. */
   backdrop?(g: CanvasRenderingContext2D, frame: { scene: PvScene; beat: PvFrame['beat']; current?: PvLine; motion: boolean }, env: PvEnv): void;
+  /** Drawn once per frame over the lines (e.g. scanlines composited onto what is already there). */
+  overlay?(g: CanvasRenderingContext2D, frame: { scene: PvScene; beat: PvFrame['beat']; current?: PvLine; motion: boolean }, env: PvEnv): void;
   /** Scene mode: draws the whole timed document (e.g. a scrolling list) instead of `draw` per line. */
   scene?(g: CanvasRenderingContext2D, api: PvSceneApi<L>, env: PvEnv): void;
 }
@@ -89,7 +101,7 @@ export interface PvStyle<L = unknown> {
 const GLYPH_BUDGET = 160;
 interface Entry { line: PvLine; start: number; position: number; exit: number; absolute: { start: number; end: number }[] }
 
-function prepare(doc: LyricDocument, index: number, text: string, layoutMode: ConfigValue): Omit<PvLine, 'hero'> & { hero: boolean } {
+function prepare(doc: LyricDocument, index: number, text: string, layoutMode: ConfigValue, fontRole?: Role): Omit<PvLine, 'hero'> & { hero: boolean } {
   const line = doc.lines[index];
   const timed = Boolean(line && doc.timingMode === 'word' && hasGranularWordTiming(line));
   const source = timed ? line!.words!.map(word => word.text).join('') : text;
@@ -114,7 +126,7 @@ function prepare(doc: LyricDocument, index: number, text: string, layoutMode: Co
   const lang = lineLang(source, song.lyrics), translationLang = lineLang(translation, song.translation);
   return { key: `${index}\u0000${source}\u0000${hero}\u0000${translation}`, id: line?.id ?? `static-${index}`, index, text: source, drawn,
     glyphs, wordOf, words, starts: wordStarts(source), hero, translation, seed: hash(`${line?.id ?? ''}:${source}`),
-    lang, translationLang, face: faceRequester(drawn, lang), tface: faceRequester(translation, translationLang) };
+    lang, translationLang, face: faceRequester(drawn, lang, fontRole), tface: faceRequester(translation, translationLang) };
 }
 
 /** Fades whatever reaches the bleed margins to transparent instead of hard-cutting it at the window edge. */
@@ -154,11 +166,14 @@ export function createPvStage(style: PvStyle, profileId: string, fields: ConfigF
     let stored: unknown, options = normalizeConfig(fields, undefined), optionsKey = '';
     let lastDoc: LyricDocument | undefined, staticStart = performance.now(), seenFonts = -1;
     let raf = 0, disposed = false, tick = 0;
+    // 动效速度 stretches the visual clock of entrances and exits; word timing stays real.
+    const speed = () => Math.min(3, Math.max(0.25, Number(options.speed ?? 1)));
 
     const line = (doc: LyricDocument, index: number, value: string) => {
       const cacheKey = `${index}\u0000${value}\u0000${options.layout}`;
       let result = prepared.get(cacheKey);
-      if (!result) { result = prepare(doc, index, value, options.layout); prepared.set(cacheKey, result); }
+      const role = typeof options.font === 'string' && options.font !== 'auto' ? options.font as Role : undefined;
+      if (!result) { result = prepare(doc, index, value, options.layout, role); prepared.set(cacheKey, result); }
       return result;
     };
     const schedule = (state: AppState, position: number): Entry[] => {
@@ -178,8 +193,9 @@ export function createPvStage(style: PvStyle, profileId: string, fields: ConfigF
         if (end !== undefined && end <= item.startMs) continue;
         let exit = 0;
         if (end !== undefined) {
-          const lead = Math.min(style.exitMs * 0.5, (end - item.startMs) * 0.3);
-          exit = clamp01((position - (end - lead)) / style.exitMs);
+          const exitMs = style.exitMs / speed();
+          const lead = Math.min(exitMs * 0.5, (end - item.startMs) * 0.3);
+          exit = clamp01((position - (end - lead)) / exitMs);
           if (exit >= 1) continue;
         }
         const prepared = line(doc, i, item.text);
@@ -210,7 +226,8 @@ export function createPvStage(style: PvStyle, profileId: string, fields: ConfigF
       if (root.style.height !== `${height}px`) root.style.height = `${height}px`;
       const dpr = Math.min(3, Math.max(1, globalThis.devicePixelRatio || 1));
       const motion = options.motion !== false && !media?.matches;
-      const env: PvEnv = { width: width - bx * 2, height: inner, dpr, size, options, motion, showTranslation: settings.showTranslation, fontFamily: settings.fontFamily };
+      const env: PvEnv = { width: width - bx * 2, height: inner, dpr, size, options, motion, showTranslation: settings.showTranslation, fontFamily: settings.fontFamily,
+        amp: Math.max(0, Number(options.intensity ?? 1)) };
       const position = timeline.position(state);
       const entries = schedule(state, position);
       const amount = motion ? Number(options.beat ?? 0) : 0;
@@ -286,8 +303,11 @@ export function createPvStage(style: PvStyle, profileId: string, fields: ConfigF
         for (const entry of listMode ? [] : entries) {
           const cached = { layout: layoutOf(entry.line) };
           const words = entry.absolute, wordOf = entry.line.wordOf;
+          // 动效速度 scales the line's visual clock; word starts are scaled alike so a
+          // word still appears exactly when it is sung.
+          const rate = speed();
           const sample: PvFrame = {
-            t: motion ? entry.position - entry.start : 1e7,
+            t: motion ? (entry.position - entry.start) * rate : 1e7,
             exit: motion ? entry.exit : entry.exit > 0 ? 1 : 0,
             beat, scene,
             sung: glyph => {
@@ -296,11 +316,12 @@ export function createPvStage(style: PvStyle, profileId: string, fields: ConfigF
             },
             wordAt: glyph => {
               const word = words[wordOf[glyph]];
-              return word ? word.start - entry.start : undefined;
+              return word ? (word.start - entry.start) * rate : undefined;
             },
           };
           g.save(); style.draw(g, cached.layout, sample, env); g.restore();
         }
+        if (style.overlay) { g.save(); style.overlay(g, { scene, beat, current: current?.line, motion }, env); g.restore(); }
         g.setTransform(dpr, 0, 0, dpr, 0, 0);
         feather(g, width, height, bx, by);
         if (settings.backgroundOpacity > 0) {

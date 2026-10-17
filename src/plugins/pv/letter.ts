@@ -1,7 +1,7 @@
 import { breakRows, clamp01, easeOutBack, easeOutCubic, isSpace, rng, splitAt } from './core';
 import type { Face } from '../typeface';
 import { blit, rgba, sprite, type Sprite } from './paint';
-import { faceFont, type PvEnv, type PvFrame, type PvLine, type PvStyle } from './stage';
+import { faceFont, hue, type PvEnv, type PvFrame, type PvLine, type PvStyle } from './stage';
 
 // Love letter: ivory rounded type blooming into a pink / mint glow, falling
 // petals, and verses written on mint ornate labels or scalloped paper notes.
@@ -54,8 +54,10 @@ function heroLayout(g: CanvasRenderingContext2D, line: PvLine, env: PvEnv): Hero
   const glyphs = line.glyphs, halo = env.options.glow !== false;
   const mode = String(env.options.palette);
   const random = rng(line.seed);
-  const duo = mode === 'duo';
-  const glowA = mode === 'mint' ? GLOW.mint : GLOW.pink, glowB = mode === 'pink' ? GLOW.pink : GLOW.mint;
+  const duo = mode === 'duo' || mode === 'custom';
+  const custom = mode === 'custom' ? { pink: hue(env, 'glowA', GLOW.pink), mint: hue(env, 'glowB', GLOW.mint) } : GLOW;
+  const glowA = mode === 'mint' ? custom.mint : custom.pink, glowB = mode === 'pink' ? custom.pink : custom.mint;
+  const ivory = hue(env, 'ink', IVORY);
   const face = line.face('maru', 500);
   g.font = faceFont(face, 100);
   const unit = glyphs.map(glyph => isSpace(glyph) ? 30 : g.measureText(glyph).width / 100);
@@ -74,7 +76,7 @@ function heroLayout(g: CanvasRenderingContext2D, line: PvLine, env: PvEnv): Hero
     const out: Glyph[] = [];
     for (const i of indices) {
       const adv = (isSpace(glyphs[i]) ? 0.3 : unit[i]) * size;
-      if (!isSpace(glyphs[i])) out.push({ index: i, sprite: glyphSprite(glyphs[i], size, k, glow, face, IVORY, halo), x: x + adv / 2, y: cy });
+      if (!isSpace(glyphs[i])) out.push({ index: i, sprite: glyphSprite(glyphs[i], size, k, glow, face, ivory, halo), x: x + adv / 2, y: cy });
       x += adv;
     }
     const text = indices.map(i => glyphs[i]).join('').trim();
@@ -89,13 +91,13 @@ function heroLayout(g: CanvasRenderingContext2D, line: PvLine, env: PvEnv): Hero
   }
   const petals: Petal[] = [];
   if (env.options.petals !== false) for (let p = 0; p < 12; p++) {
-    petals.push({ x: random() * W, y: -S * 0.3 - random() * H * 0.4, vx: (random() - 0.2) * S * 0.9, vy: (0.5 + random() * 0.8) * H,
+    petals.push({ x: random() * W, y: -S * 0.3 - random() * H * 0.4, vx: (random() - 0.2) * S * 0.9 * env.amp, vy: (0.5 + random() * 0.8) * H,
       spin: (random() - 0.5) * 8, size: S * (0.1 + random() * 0.1), color: PETALS[p % PETALS.length], delay: random() * 600 });
   }
   const layout: Hero = { hero: true, parts, petals };
   if (translation) {
     const ts = S * 0.36;
-    const s = glyphSprite(line.translation, ts, dpr, GLOW.pink, line.tface('script', 400, 'italic'), IVORY, halo);
+    const s = glyphSprite(line.translation, ts, dpr, glowA, line.tface('script', 400, 'italic'), ivory, halo);
     layout.script = { sprite: s, x: Math.min(W * 0.95 - s.w / 2, W * 0.08 + s.w / 2), y: H - S * 0.32 };
   }
   return layout;
@@ -196,7 +198,7 @@ function cardLayout(g: CanvasRenderingContext2D, line: PvLine, env: PvEnv): Card
 }
 
 function drawHero(g: CanvasRenderingContext2D, layout: Hero, frame: PvFrame, env: PvEnv) {
-  const { t, exit } = frame;
+  const { t, exit } = frame, amp = env.amp;
   if (env.motion) for (const p of layout.petals) {
     const tp = t - p.delay;
     if (tp <= 0 || tp > 2600) continue;
@@ -212,20 +214,20 @@ function drawHero(g: CanvasRenderingContext2D, layout: Hero, frame: PvFrame, env
     const start = Math.max(part.delay, firstWord ?? 0);
     const tp = t - start;
     if (tp <= 0) continue;
-    const float = env.motion ? Math.sin(t / 2600 * Math.PI * 2 + part.delay) * part.size * 0.025 : 0;
+    const float = env.motion ? Math.sin(t / 2600 * Math.PI * 2 + part.delay) * part.size * 0.025 * amp : 0;
     // Bloom flash: overexposed white-mint glow that settles into the crisp glyphs.
     if (env.motion && tp < 900) {
       const peak = tp < 90 ? tp / 90 : 1 - easeOutCubic((tp - 90) / 810);
-      blit(g, part.bloom, part.x, part.y + float, 1.05 - 0.05 * easeOutCubic(tp / 900), 0, peak * 0.95 * (1 - exit));
+      blit(g, part.bloom, part.x, part.y + float, 1 + 0.05 * amp * (1 - easeOutCubic(tp / 900)), 0, peak * Math.min(1, 0.95 * amp) * (1 - exit));
     }
     part.glyphs.forEach((glyph, i) => {
       const tg = tp - i * 45;
       if (tg <= 0) return;
       const e = easeOutCubic(tg / 380);
-      const blur = env.motion ? (1 - e) * part.size * 0.18 + exit * part.size * 0.16 : 0;
+      const blur = env.motion ? ((1 - e) * part.size * 0.18 + exit * part.size * 0.16) * Math.min(1.5, amp) : 0;
       g.save();
       if (blur > 0.4) g.filter = `blur(${blur.toFixed(1)}px)`;
-      const y = glyph.y + float + (1 - e) * part.size * 0.2 - exit * part.size * 0.18;
+      const y = glyph.y + float + ((1 - e) * part.size * 0.2 - exit * part.size * 0.18) * amp;
       const kick = frame.beat.pulse;
       blit(g, glyph.sprite, glyph.x, y, 1 + 0.04 * kick, 0, e * (1 - exit));
       g.restore();
@@ -250,11 +252,11 @@ function drawHero(g: CanvasRenderingContext2D, layout: Hero, frame: PvFrame, env
 }
 
 function drawCard(g: CanvasRenderingContext2D, layout: Card, frame: PvFrame, env: PvEnv) {
-  const { t, exit } = frame, S = layout.size;
-  const e = easeOutBack(t / 420, 1.6), settle = easeOutCubic(t / 420);
-  const rotation = layout.rest + (1 - settle) * -0.14 + exit * 0.08;
-  const scale = (0.86 + 0.14 * e) * (1 - exit * 0.06) * (1 + 0.025 * frame.beat.pulse);
-  g.translate(layout.x + exit * S * 1.4, layout.y - (1 - settle) * S * 0.7);
+  const { t, exit } = frame, S = layout.size, amp = env.amp;
+  const e = easeOutBack(t / 420, 1.6 * Math.min(1.5, amp)), settle = easeOutCubic(t / 420);
+  const rotation = layout.rest + ((1 - settle) * -0.14 + exit * 0.08) * amp;
+  const scale = (1 - 0.14 * amp * (1 - e)) * (1 - exit * 0.06) * (1 + 0.025 * frame.beat.pulse);
+  g.translate(layout.x + exit * S * 1.4 * amp, layout.y - (1 - settle) * S * 0.7 * amp);
   g.rotate(rotation); g.scale(scale, scale);
   g.globalAlpha = clamp01(t / 120) * (1 - exit);
   blit(g, layout.card, 0, 0);
@@ -266,9 +268,8 @@ function drawCard(g: CanvasRenderingContext2D, layout: Card, frame: PvFrame, env
     if (tg <= 0) return;
     const a = easeOutCubic(tg / (layout.note ? 220 : 180));
     // Notes ink in like handwriting; labels print with a short lift.
-    blit(g, glyph.sprite, glyph.x, glyph.y + (layout.note ? 0 : (1 - a) * S * 0.2), layout.note ? 1.12 - 0.12 * a : 1, 0, a);
+    blit(g, glyph.sprite, glyph.x, glyph.y + (layout.note ? 0 : (1 - a) * S * 0.2 * amp), layout.note ? 1 + 0.12 * amp * (1 - a) : 1, 0, a);
   });
-  void env;
 }
 
 export const letterStyle: PvStyle<Layout> = {

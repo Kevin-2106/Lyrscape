@@ -1,7 +1,7 @@
 import { chromium, expect } from '@playwright/test';
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
-import { go, openPlugin } from './lib/nav.mjs';
+import { go, inspectorTab, openPlugin } from './lib/nav.mjs';
 
 const output = process.env.LYRSCAPE_QA_DIR ?? path.resolve('qa');
 await mkdir(output, { recursive: true });
@@ -28,9 +28,9 @@ try {
   await go(page, 'lyrics');
   await expect(page.locator('[data-renderer-label]')).toHaveText('普通文字');
   await go(page, 'plugins');
-  await expect(page.locator('.plugin-count')).toHaveText('24 / 24 已启用');
+  await expect(page.locator('.plugin-count')).toHaveText('27 / 27 已启用');
   await page.locator('[data-plugin-group="look"]').click();
-  await expect(page.locator('.plugin-row:visible')).toHaveCount(10);
+  await expect(page.locator('.plugin-row:visible')).toHaveCount(13);
   await page.locator('[data-plugin-search]').fill('aurora');
   await expect(page.locator('.plugin-row:visible')).toHaveCount(1);
   await page.locator('[data-plugin-search]').fill('does-not-exist');
@@ -122,6 +122,7 @@ try {
   await aurora.locator('[data-plugin-reset]').click();
   await expect(aurora.locator('[data-plugin-config="duration"]')).toHaveValue('850');
   await go(page, 'style');
+  await inspectorTab(page, 'color');
   await page.locator('[data-setting="gradientEnabled"]').check();
   await input('[data-seek]', 9000);
   await go(page, 'lyrics');

@@ -15,7 +15,15 @@ export function renderConfigFields(host: HTMLElement, owner: { id: string; name:
   onChange: (patch: Record<string, ConfigValue>) => void, signal: AbortSignal): ConfigFieldsView {
   host.replaceChildren();
   const sliders = new Map<string, HTMLInputElement>(), outputs = new Map<string, HTMLOutputElement>();
+  // A flat list (plugin manager) shows group headings when the options span several groups.
+  const grouped = new Set((owner.fields ?? []).map(field => field.group ?? '')).size > 1;
+  let group: string | undefined;
   for (const field of owner.fields ?? []) {
+    if (grouped && (field.group ?? '选项') !== group) {
+      group = field.group ?? '选项';
+      const heading = document.createElement('h4'); heading.className = 'option-group'; heading.textContent = group;
+      host.append(heading);
+    }
     const id = `option-${++sequence}`;
     const row = document.createElement('div'); row.className = `option-row is-${field.type}`;
     const text = document.createElement('label'); text.className = 'option-text'; text.htmlFor = id;
@@ -28,6 +36,13 @@ export function renderConfigFields(host: HTMLElement, owner: { id: string; name:
       input = document.createElement('select');
       for (const option of field.options ?? []) input.add(new Option(option.label, option.value));
       control.append(input);
+    } else if (field.type === 'color') {
+      // Swatch picker plus exact hex; both commit through the text input's value.
+      const picker = Object.assign(document.createElement('input'), { type: 'color', tabIndex: -1 });
+      picker.dataset.pluginColor = field.key; picker.setAttribute('aria-hidden', 'true');
+      input = Object.assign(document.createElement('input'), { type: 'text', spellcheck: false, maxLength: 7, pattern: '#[0-9a-fA-F]{6}', required: true });
+      picker.addEventListener('input', () => { input.value = picker.value; onChange({ [field.key]: picker.value }); }, { signal });
+      control.append(picker, input);
     } else if (field.type === 'boolean') {
       input = Object.assign(document.createElement('input'), { type: 'checkbox', className: 'switch' });
       const track = document.createElement('span'); track.className = 'switch-track'; track.setAttribute('aria-hidden', 'true');
@@ -45,7 +60,7 @@ export function renderConfigFields(host: HTMLElement, owner: { id: string; name:
     input.setAttribute('aria-label', `${owner.name} ${field.label}`);
     input.addEventListener('change', () => {
       if (input instanceof HTMLInputElement && !input.checkValidity()) { input.reportValidity(); return; }
-      const value: ConfigValue = input instanceof HTMLSelectElement ? input.value : input.type === 'checkbox' ? input.checked : Number(input.value);
+      const value: ConfigValue = input instanceof HTMLSelectElement || field.type === 'color' ? input.value.toLowerCase() : input.type === 'checkbox' ? input.checked : Number(input.value);
       onChange({ [field.key]: value });
     }, { signal });
     row.append(control); host.append(row);
@@ -60,6 +75,8 @@ export function renderConfigFields(host: HTMLElement, owner: { id: string; name:
         const value = values?.[input.dataset.pluginConfig!];
         if (input instanceof HTMLInputElement && input.type === 'checkbox') input.checked = Boolean(value);
         else if (document.activeElement !== input) input.value = String(value ?? '');
+        const picker = host.querySelector<HTMLInputElement>(`[data-plugin-color="${input.dataset.pluginConfig}"]`);
+        if (picker && document.activeElement !== picker && /^#[0-9a-f]{6}$/i.test(String(value))) picker.value = String(value);
         const slider = sliders.get(input.dataset.pluginConfig!);
         if (slider && document.activeElement !== slider) { slider.value = String(value ?? slider.min); paint(slider); }
       });

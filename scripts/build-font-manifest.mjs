@@ -1,4 +1,39 @@
 import { readFile, writeFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
+import { inflateSync } from 'node:zlib';
+
+/** Code points a WOFF 1.0 file maps (cmap format 12, else 4), for faces published without unicode-range. */
+function woffCoverage(buffer) {
+  if (buffer.toString('latin1', 0, 4) !== 'wOFF') throw Error('not a WOFF 1.0 file');
+  const tables = buffer.readUInt16BE(12);
+  let cmap;
+  for (let i = 0; i < tables; i++) {
+    const at = 44 + i * 20;
+    if (buffer.toString('latin1', at, at + 4) !== 'cmap') continue;
+    const offset = buffer.readUInt32BE(at + 4), compressed = buffer.readUInt32BE(at + 8), length = buffer.readUInt32BE(at + 12);
+    const raw = buffer.subarray(offset, offset + compressed);
+    cmap = compressed < length ? inflateSync(raw) : raw;
+  }
+  if (!cmap) throw Error('WOFF without cmap');
+  const records = cmap.readUInt16BE(2), subtables = [];
+  for (let i = 0; i < records; i++) {
+    const at = 4 + i * 8, platform = cmap.readUInt16BE(at), encoding = cmap.readUInt16BE(at + 2);
+    if (platform === 3 || platform === 0) subtables.push({ format: cmap.readUInt16BE(cmap.readUInt32BE(at + 4)), offset: cmap.readUInt32BE(at + 4), encoding });
+  }
+  const spans = [];
+  const twelve = subtables.find(table => table.format === 12), four = subtables.find(table => table.format === 4);
+  if (twelve) {
+    const groups = cmap.readUInt32BE(twelve.offset + 12);
+    for (let g = 0; g < groups; g++) { const at = twelve.offset + 16 + g * 12; spans.push([cmap.readUInt32BE(at), cmap.readUInt32BE(at + 4)]); }
+  } else if (four) {
+    const base = four.offset, segments = cmap.readUInt16BE(base + 6) / 2;
+    for (let s = 0; s < segments; s++) {
+      const end = cmap.readUInt16BE(base + 14 + s * 2), start = cmap.readUInt16BE(base + 16 + segments * 2 + s * 2);
+      if (start !== 0xffff) spans.push([start, end]);
+    }
+  } else throw Error('no Unicode cmap subtable');
+  return spans;
+}
 
 // Paths come from the same explicit local catalog that Vite bundles.
 const source = await readFile('src/plugins/font-catalog.ts', 'utf8');
@@ -9,8 +44,10 @@ for (const [, file] of source.matchAll(/import\('([^']+)\?inline'\)/g)) {
     const family = /font-family:\s*['"]([^'"]+)['"]/.exec(body)?.[1];
     if (!family) throw Error(`Missing family in ${file}`);
     const spans = families.get(family) ?? [];
-    const ranges = /unicode-range:\s*([^;}]+)/.exec(body)?.[1] ?? 'U+0-10FFFF';
-    for (const [, low, high] of ranges.matchAll(/U\+([0-9a-f?]+)(?:-([0-9a-f]+))?/gi)) {
+    const ranges = /unicode-range:\s*([^;}]+)/.exec(body)?.[1];
+    const woff = /url\(([^)]+\.woff)\)\s*format\('woff'\)/.exec(body)?.[1];
+    if (!ranges && woff) spans.push(...woffCoverage(await readFile(join('node_modules', dirname(file), woff))));
+    else for (const [, low, high] of (ranges ?? 'U+0-10FFFF').matchAll(/U\+([0-9a-f?]+)(?:-([0-9a-f]+))?/gi)) {
       spans.push([parseInt(low.replace(/\?/g, '0'), 16), parseInt(high ?? low.replace(/\?/g, 'f'), 16)]);
     }
     families.set(family, spans);

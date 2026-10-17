@@ -57,6 +57,9 @@
 
 /* Option rows: plugin settings */
 .option-list { display: grid; }
+.option-group { margin: 12px 0 2px; font-size: 11px; font-weight: 600; color: var(--faint); letter-spacing: .4px; }
+.option-list > .option-group:first-child { margin-top: 2px; }
+.option-group + .option-row { border-top: 0; }
 .option-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 6px 14px; padding: 11px 0; border-top: 1px solid #1f2027; }
 .option-list > .option-row:first-child { border-top: 0; }
 .option-text { display: grid; gap: 3px; min-width: 0; cursor: inherit; }
@@ -66,6 +69,8 @@
 .option-row.is-number { grid-template-columns: minmax(0, 1fr); }
 .option-row.is-number .option-control input[type="range"] { flex: 1; min-width: 0; }
 .option-row.is-number .option-control input[type="number"] { width: 76px; height: 28px; padding: 0 8px; font-size: 12px; font-variant-numeric: tabular-nums; }
+.option-row.is-color .option-control input[type="color"] { width: 30px; height: 26px; padding: 0; border: 1px solid var(--line); border-radius: 6px; background: none; cursor: pointer; }
+.option-row.is-color .option-control input[type="text"] { width: 84px; height: 28px; padding: 0 8px; font-size: 12px; font-family: var(--mono, ui-monospace, monospace); }
 .option-row select { height: 30px; padding: 0 8px; font-size: 12px; min-width: 120px; max-width: 180px; }
 .switch-host { position: relative; display: inline-flex; align-items: center; cursor: pointer; }
 

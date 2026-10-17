@@ -74,10 +74,13 @@ fields: [
   { key: 'speed', label: '速度', type: 'number', default: 1, min: 0.2, max: 3, step: 0.1, description: '可选说明' },
   { key: 'glow', label: '光晕', type: 'boolean', default: true },
   { key: 'mode', label: '模式', type: 'select', default: 'a', options: [{ value: 'a', label: 'A' }, { value: 'b', label: 'B' }] },
+  { key: 'ink', label: '文字', type: 'color', default: '#ffffff', group: '颜色' },
 ]
 ```
 
-- 界面会自动生成：`number` 是滑块加精确输入框，`boolean` 是开关，`select` 是下拉菜单。
+- 界面会自动生成：`number` 是滑块加精确输入框，`boolean` 是开关，`select` 是下拉菜单，`color` 是颜色选择器加 HEX 输入框（默认值必须是 `#rrggbb`，保存为小写）。
+- `group`（可选，最多 8 个字）决定配置项出现在渲染器检查器的哪个页签；与「字体」「颜色」「显示」同名时会和共享文字设置合并到同一页。未设置时放在「选项」页。
+- renderer 可在 manifest 顶层声明 `theme: ['font', 'color', 'nextLine']` 的子集，表示使用哪些共享文字设置；省略为全部，`[]` 表示只使用「显示」页（字号、背景、译文）。
 - 读取方式：`state.plugins.configs[manifest.id]?.speed`。宿主保证值合法：数字会被夹在 min–max 范围内并对齐 step，选项一定在 options 里。
 - 修改 `fields` 后重新导入即可。已保存的配置会按新的定义重新归一化，未知字段会被丢弃。
 

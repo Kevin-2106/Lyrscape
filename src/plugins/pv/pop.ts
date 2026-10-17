@@ -1,12 +1,13 @@
 import { breakRows, clamp01, easeOutBack, easeOutCubic, isHan, isSpace, lerp, rng, splitAt } from './core';
 import { blit, blitBand, font, heart, mix, releaseSprites, scallopCircle, sprite, star, type Sprite } from './paint';
 import type { Face } from '../typeface';
-import { faceFont, type PvEnv, type PvFrame, type PvLine, type PvStyle } from './stage';
+import { faceFont, hue, type PvEnv, type PvFrame, type PvLine, type PvStyle } from './stage';
 
 // Candy pop: flat maroon kana, gradient kanji, soft white halo, sticker stars,
 // and a torn maroon caption pill for verses.
-const INK = '#5c1a2b';
-const PILL = '#4c1823';
+// 假名 / 字幕条 colours come from the options; set before each layout (option changes rebuild layouts).
+let INK = '#5c1a2b';
+let PILL = '#4c1823';
 const KANJI: [string, string][] = [
   ['#ff3d8b', '#b23cc8'], ['#ff8a12', '#ffc83a'], ['#3f5cf2', '#a35cf0'], ['#ef2638', '#ff6a55'], ['#e0409c', '#ff7d5a'],
 ];
@@ -110,13 +111,15 @@ function heroLayout(g: CanvasRenderingContext2D, line: PvLine, env: PvEnv): Layo
   const translation = env.showTranslation && line.translation;
   const cy = env.height / 2 - (translation ? env.size * 0.3 : 0);
   const random = rng(line.seed);
-  let palette = Math.floor(random() * KANJI.length);
+  const custom = env.options.kanji === 'custom';
+  const kanji: [string, string][] = custom ? [[hue(env, 'kanjiStart', '#ff3d8b'), hue(env, 'kanjiEnd', '#b23cc8')]] : KANJI;
+  let palette = Math.floor(random() * kanji.length);
   const out: Glyph[] = [];
   const runColor = new Map<number, { colors: [string, string]; from: number; length: number }>();
   for (let i = 0; i < glyphs.length;) {
     if (!isHan(glyphs[i])) { i++; continue; }
     let j = i; while (j < glyphs.length && isHan(glyphs[j])) j++;
-    const info = { colors: KANJI[palette++ % KANJI.length], from: i, length: j - i };
+    const info = { colors: kanji[palette++ % kanji.length], from: i, length: j - i };
     for (let x = i; x < j; x++) runColor.set(x, info);
     i = j;
   }
@@ -145,7 +148,7 @@ function heroLayout(g: CanvasRenderingContext2D, line: PvLine, env: PvEnv): Layo
     for (let p = 0; p < 16; p++) {
       const angle = random() * Math.PI * 2, speed = (0.5 + random() * 1.1) * size;
       particles.push({ kind: p % 6 === 5 ? 4 : Math.floor(random() * 4), x: (random() - 0.5) * blockW * 0.9, y: (random() - 0.5) * blockH * 0.6,
-        vx: Math.cos(angle) * speed * 1.6, vy: Math.sin(angle) * speed * 0.5, spin: (random() - 0.5) * 6, size: size * (0.28 + random() * 0.3), delay: random() * 120 });
+        vx: Math.cos(angle) * speed * 1.6 * env.amp, vy: Math.sin(angle) * speed * 0.5 * env.amp, spin: (random() - 0.5) * 6, size: size * (0.28 + random() * 0.3), delay: random() * 120 });
     }
   }
   const layout: Layout = { hero: true, size, glyphs: out, cx: W / 2, cy, tilt: Number(env.options.tilt) * Math.PI / 180, width: blockW, height: blockH, particles };
@@ -219,7 +222,7 @@ function captionLayout(g: CanvasRenderingContext2D, line: PvLine, env: PvEnv): L
 }
 
 function drawHero(g: CanvasRenderingContext2D, layout: Layout, frame: PvFrame, env: PvEnv) {
-  const { t, exit } = frame, S = layout.size;
+  const { t, exit } = frame, S = layout.size, amp = env.amp;
   const drift = env.motion && env.options.drift !== false ? lerp(0.14, -0.14, clamp01(t / 4500)) * S : 0;
   g.translate(layout.cx + drift, layout.cy);
   g.rotate(layout.tilt);
@@ -235,8 +238,8 @@ function drawHero(g: CanvasRenderingContext2D, layout: Layout, frame: PvFrame, e
   layout.glyphs.forEach((glyph, i) => {
     const tg = t - i * 32 - (glyph.badge ? 140 : 0);
     if (tg <= 0) return;
-    const bob = env.motion ? Math.sin(t / 1400 * Math.PI * 2 + i * 0.9) * S * 0.035 : 0;
-    const sway = env.motion ? Math.sin(t / 1900 * Math.PI * 2 + i * 1.3) * 0.025 : 0;
+    const bob = env.motion ? Math.sin(t / 1400 * Math.PI * 2 + i * 0.9) * S * 0.035 * amp : 0;
+    const sway = env.motion ? Math.sin(t / 1900 * Math.PI * 2 + i * 1.3) * 0.025 * amp : 0;
     const out = clamp01(exit * 1.5 - (i / Math.max(1, n)) * 0.5);
     let bump = 0;
     const sung = frame.sung(glyph.index), at = frame.wordAt(glyph.index);
@@ -246,18 +249,18 @@ function drawHero(g: CanvasRenderingContext2D, layout: Layout, frame: PvFrame, e
       const band = glyph.sprite.h / 3;
       for (let b = 0; b < 3; b++) {
         const e = easeOutCubic((tg - b * 45) / 240);
-        const dx = (b % 2 ? 1 : -1) * glyph.sign * (1 - e) * S * 1.4;
+        const dx = (b % 2 ? 1 : -1) * glyph.sign * (1 - e) * S * 1.4 * amp;
         blitBand(g, glyph.sprite, b * band, band + 0.5, glyph.x + dx, glyph.y + bob, clamp01((tg - b * 45) / 60));
       }
       return;
     }
-    const e = glyph.kanji ? 1 : easeOutBack(tg / 300, 2.3);
+    const e = glyph.kanji ? 1 : easeOutBack(tg / 300, 2.3 * Math.min(1.6, amp));
     const settle = easeOutCubic(tg / 300);
     // Beat: every glyph swells, alternate glyphs hop higher, like the PV's bouncing kana.
     const kick = frame.beat.pulse;
     const scale = e * (1 + bump + 0.1 * kick) * (1 - 0.45 * out);
-    const rotation = (1 - settle) * 0.55 * glyph.sign + glyph.spin + sway + out * 0.4 * glyph.sign;
-    const y = glyph.y + bob + (1 - settle) * S * 0.35 - out * S * 0.3 - kick * S * (i % 2 ? 0.07 : 0.14);
+    const rotation = ((1 - settle) * 0.55 * glyph.sign + out * 0.4 * glyph.sign) * amp + glyph.spin + sway;
+    const y = glyph.y + bob + ((1 - settle) * S * 0.35 - out * S * 0.3) * amp - kick * S * (i % 2 ? 0.07 : 0.14);
     blit(g, glyph.sprite, glyph.x - out * S * 0.25, y, scale, rotation, clamp01(tg / 60) * (1 - out));
   });
   if (env.motion) for (const p of layout.particles) {
@@ -270,10 +273,10 @@ function drawHero(g: CanvasRenderingContext2D, layout: Layout, frame: PvFrame, e
   }
 }
 
-function drawCaption(g: CanvasRenderingContext2D, layout: Layout, frame: PvFrame) {
+function drawCaption(g: CanvasRenderingContext2D, layout: Layout, frame: PvFrame, amp: number) {
   const { t, exit } = frame, pill = layout.pill!, S = layout.size;
   const wipe = easeOutCubic(t / 260);
-  g.translate(0, exit * S * 0.5);
+  g.translate(0, exit * S * 0.5 * amp);
   const k = 1 + 0.03 * frame.beat.pulse;
   if (k !== 1) {
     const cx = pill.x + pill.w / 2, cy = pill.y + layout.height / 2;
@@ -291,7 +294,7 @@ function drawCaption(g: CanvasRenderingContext2D, layout: Layout, frame: PvFrame
     const tg = t - appear;
     if (tg < 0) return;
     const e = easeOutCubic(tg / 140);
-    blit(g, glyph.sprite, glyph.x, glyph.y + (1 - e) * S * 0.25, 1, 0, e);
+    blit(g, glyph.sprite, glyph.x, glyph.y + (1 - e) * S * 0.25 * amp, 1, 0, e);
   });
 }
 
@@ -299,10 +302,16 @@ export const popStyle: PvStyle<Layout> = {
   id: 'pop', exitMs: 260,
   fonts: [],
   height: (size, translation) => size * 2.8 + (translation ? size * 0.6 : 0),
-  layout: (g, line, env) => (line.hero ? heroLayout : captionLayout)(g, line, env),
+  layout: (g, line, env) => {
+    const ink = hue(env, 'ink', '#5c1a2b');
+    // Sticker outlines bake the ink colour in.
+    if (ink !== INK) { releaseSprites(particleCache.values()); particleCache.clear(); INK = ink; }
+    PILL = hue(env, 'pill', '#4c1823');
+    return (line.hero ? heroLayout : captionLayout)(g, line, env);
+  },
   draw(g, layout, frame, env) {
     if (layout.hero) { g.save(); drawHero(g, layout, frame, env); g.restore(); }
-    else { g.save(); drawCaption(g, layout, frame); g.restore(); }
+    else { g.save(); drawCaption(g, layout, frame, env.amp); g.restore(); }
     if (layout.translation) {
       const e = easeOutCubic((frame.t - 200) / 300);
       blit(g, layout.translation.sprite, layout.translation.x, layout.translation.y + (1 - e) * 6, 1, 0, e * (1 - frame.exit));

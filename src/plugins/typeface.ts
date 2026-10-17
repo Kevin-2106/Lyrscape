@@ -9,7 +9,7 @@ import { bundledCoverage, ensureBundledFonts } from './font-assets';
  * Noto face for the whole line rather than falling back glyph by glyph.
  */
 export type Lang = 'ja' | 'zh-Hans' | 'zh-Hant' | 'ko' | 'latin';
-export type Role = 'pop' | 'maru' | 'hand' | 'gothic' | 'mincho' | 'heavy' | 'code' | 'mono' | 'script' | 'serif';
+export type Role = 'pop' | 'maru' | 'hand' | 'gothic' | 'mincho' | 'heavy' | 'code' | 'rounded' | 'pixel' | 'mono' | 'script' | 'serif' | 'arcade';
 export interface Face { family: string; weight: number; style: string }
 
 const KANA = /[\p{Script=Hiragana}\p{Script=Katakana}]/u;
@@ -73,14 +73,19 @@ const TABLE: Record<Role, Partial<Record<Lang, Entry>>> = {
   mincho: NOTO_SERIF,
   heavy: { ja: { family: 'Dela Gothic One', weights: [400] }, 'zh-Hans': { family: 'ZCOOL QingKe HuangYou', weights: [400] }, 'zh-Hant': { family: 'Noto Sans TC', weights: [900] } },
   code: { ja: { family: 'M PLUS 1 Code', weights: [300, 500] }, 'zh-Hans': NOTO['zh-Hans'], 'zh-Hant': NOTO['zh-Hant'] },
+  // Heavy rounded gothic; Chinese keeps its own glyph forms in the black Noto weights.
+  rounded: { ja: { family: 'M PLUS Rounded 1c', weights: [500, 800, 900] }, 'zh-Hans': { family: 'Noto Sans SC', weights: [500, 700, 900] }, 'zh-Hant': { family: 'Noto Sans TC', weights: [500, 700, 900] } },
+  // 12 px bitmap faces (Fusion Pixel), one per script.
+  pixel: { ja: { family: 'Fusion Pixel 12px Proportional JP', weights: [400] }, 'zh-Hans': { family: 'Fusion Pixel 12px Proportional SC', weights: [400] }, 'zh-Hant': { family: 'Fusion Pixel 12px Proportional TC', weights: [400] } },
   // Latin-only roles: CJK text in them is routed to a matching CJK role instead.
   mono: { latin: { family: 'Share Tech Mono', weights: [400] } },
   script: { latin: { family: 'Playfair Display', weights: [400], italic: true } },
   serif: { latin: { family: 'EB Garamond', weights: [400], italic: true } },
+  arcade: { latin: { family: 'Press Start 2P', weights: [400] } },
 };
-const LATIN_ROUTE: Partial<Record<Role, Role>> = { mono: 'code', script: 'hand', serif: 'mincho' };
+const LATIN_ROUTE: Partial<Record<Role, Role>> = { mono: 'code', script: 'hand', serif: 'mincho', arcade: 'pixel' };
 const GENERIC: Record<Role, string> = { pop: 'sans-serif', maru: 'sans-serif', hand: 'cursive', gothic: 'sans-serif', mincho: 'serif',
-  heavy: 'sans-serif', code: 'monospace', mono: 'monospace', script: 'serif', serif: 'serif' };
+  heavy: 'sans-serif', code: 'monospace', rounded: 'sans-serif', pixel: 'monospace', mono: 'monospace', script: 'serif', serif: 'serif', arcade: 'monospace' };
 
 let rangeVersion = -1;
 const ranges = new Map<string, [number, number][] | null>();

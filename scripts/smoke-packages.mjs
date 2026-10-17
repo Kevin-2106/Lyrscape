@@ -40,6 +40,8 @@ try {
   await main.locator(`[data-renderer-choice="${ID}"]`).click();
   await expect(main.locator('#style-preview.wave-lyric')).toHaveCount(1);
   await expect(overlay.locator('.wave-lyric')).toHaveCount(1);
+  // Ungrouped options share the 选项 tab.
+  await main.locator('[data-inspector-tab="options"]').click();
   await main.locator('[data-renderer-options] [data-plugin-config="tint"]').selectOption('glow');
   await expect(overlay.locator('.wave-lyric')).toHaveAttribute('data-wave-tint', 'glow');
 

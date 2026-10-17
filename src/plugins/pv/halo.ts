@@ -2,7 +2,7 @@ import { breakRows, clamp01, easeInCubic, easeOutBack, easeOutCubic, isHan, isKa
 import { faceFor, type Face } from '../typeface';
 import { requestFonts } from './fonts';
 import { blit, blitBand, roundRect, sprite, type Sprite } from './paint';
-import { faceFont, type PvEnv, type PvFrame, type PvLine, type PvScene, type PvStyle } from './stage';
+import { faceFont, hue, type PvEnv, type PvFrame, type PvLine, type PvScene, type PvStyle } from './stage';
 
 // Halo: a bright sky-and-white interface PV. Verses type into small white
 // "Lyrics" windows (title bar, double rule, black heavy gothic) that open with a
@@ -18,8 +18,15 @@ import { faceFont, type PvEnv, type PvFrame, type PvLine, type PvScene, type PvS
 // before settling to black. A chorus line slams in behind a burst of white
 // panels; each glyph slot draws a thin outline frame, some get a plain white
 // window that hops into place and shrinks away, and glyphs hard-cut in.
-const INK = '#0d0e12', WHITE = '#ffffff', SKY = '#38b4ee', DEEP = '#1767d6', LIME = '#d6f53a', RULE = '#cfd8e1', MUTED = '#5d6672';
-const RIM = 'rgba(8,38,92,0.68)';
+export const INK = '#0d0e12', WHITE = '#ffffff', RULE = '#cfd8e1', MUTED = '#5d6672';
+// Palette options (天蓝 / 深蓝 / 光环图标). Set at the top of every layout, draw and
+// backdrop call; option changes rebuild layouts, so cached sprites match.
+let SKY = '#38b4ee', DEEP = '#1767d6', LIME = '#d6f53a';
+export function usePalette(env: PvEnv) {
+  SKY = hue(env, 'sky', '#38b4ee'); DEEP = hue(env, 'deep', '#1767d6'); LIME = hue(env, 'lime', '#d6f53a');
+  return { sky: SKY, deep: DEEP, lime: LIME };
+}
+export const RIM = 'rgba(8,38,92,0.68)';
 
 interface Glyph { sprite: Sprite; x: number; y: number; index: number; w: number }
 /** Card glyphs also carry their word number, so II can type line-timed lyrics word by word. */
@@ -27,7 +34,7 @@ interface CardGlyph extends Glyph { unit: number }
 interface HeroGlyph extends Glyph { mosaic: Sprite; scar: number; debris: { dx: number; dy: number; s: number; c: string }[]; slot: { dx: number; dy: number; bar: number } }
 /** II: a white block over an arbitrary part of 1–3 glyphs, timed to the glyph `anchor`. */
 interface Patch { x: number; y: number; w: number; h: number; anchor: number; lead: number; hold: number; hx: number; hy: number }
-interface CardLayout {
+export interface CardLayout {
   kind: 'card'; seed: number; T: number;
   cx: number; cy: number; w: number; h: number;
   frame: Sprite; flash: Sprite; glyphs: CardGlyph[]; units: number; timed: boolean; lineH: number; textX: number;
@@ -46,15 +53,15 @@ const glitchOf = (env: PvEnv) => Number(env.options.glitch ?? 0.7);
 const accents = (env: PvEnv) => env.options.accent !== false;
 const probe = () => document.createElement('canvas').getContext('2d');
 /** `snap`: the PV's hard 30 fps cuts and the extra details of 晴空终端 II. */
-interface Variant { snap: boolean }
-const FRAME = 1000 / 30;
-const frameOf = (ms: number) => Math.floor(ms / FRAME);
+export interface Variant { snap: boolean }
+export const FRAME = 1000 / 30;
+export const frameOf = (ms: number) => Math.floor(ms / FRAME);
 const chromaOn = (variant: Variant, env: PvEnv) => variant.snap && env.motion && env.options.chroma !== false;
 const slotsOn = (variant: Variant, env: PvEnv) => variant.snap && env.motion && env.options.slots !== false;
 const burstOn = (variant: Variant, env: PvEnv) => variant.snap && env.motion && env.options.burst !== false;
 
 /** Lime tile with a white halo arc: the style's recurring accent. */
-function haloTile(g: CanvasRenderingContext2D, x: number, y: number, s: number, alpha = 1) {
+export function haloTile(g: CanvasRenderingContext2D, x: number, y: number, s: number, alpha = 1) {
   if (alpha <= 0.001 || s <= 0) return;
   g.save(); g.globalAlpha *= alpha;
   g.fillStyle = 'rgba(8,38,92,0.25)'; g.fillRect(x - s / 2 + s * 0.06, y - s / 2 + s * 0.08, s, s);
@@ -65,7 +72,7 @@ function haloTile(g: CanvasRenderingContext2D, x: number, y: number, s: number, 
   g.beginPath(); g.ellipse(x, y + s * 0.16, s * 0.2, s * 0.08, 0, Math.PI * 0.1, Math.PI * 0.9); g.stroke();
   g.restore();
 }
-const plus = (g: CanvasRenderingContext2D, x: number, y: number, r: number) => {
+export const plus = (g: CanvasRenderingContext2D, x: number, y: number, r: number) => {
   g.fillRect(x - r, y - r * 0.16, r * 2, r * 0.32); g.fillRect(x - r * 0.16, y - r, r * 0.32, r * 2);
 };
 
@@ -73,11 +80,11 @@ const plus = (g: CanvasRenderingContext2D, x: number, y: number, r: number) => {
 
 // One short flash per freshly typed chunk: a single saturated colour (the next in
 // the PV's order for each new chunk) for three frames, then ink. Never cycles.
-const CHROMA = ['#7a2cff', '#ff2142', '#25a8f0', '#2a3cf5', '#f01fd0'];
+export const CHROMA = ['#7a2cff', '#ff2142', '#25a8f0', '#2a3cf5', '#f01fd0'];
 const FLASH_MS = 3 * FRAME, SELECT_MS = 2 * FRAME;
 let scratch: HTMLCanvasElement | undefined;
 /** Draws a sprite's alpha mask filled with one colour (via a shared scratch canvas). */
-function tinted(g: CanvasRenderingContext2D, s: Sprite, x: number, y: number, color: string) {
+export function tinted(g: CanvasRenderingContext2D, s: Sprite, x: number, y: number, color: string) {
   const cw = s.canvas.width, ch = s.canvas.height;
   const canvas = scratch ??= document.createElement('canvas');
   if (canvas.width < cw || canvas.height < ch) { canvas.width = Math.max(canvas.width, cw); canvas.height = Math.max(canvas.height, ch); }
@@ -97,7 +104,7 @@ const inkGlyph = (text: string, size: number, k: number, face: Face) => {
   });
 };
 
-function cardLayout(g: CanvasRenderingContext2D, line: PvLine, env: PvEnv): CardLayout {
+export function cardLayout(g: CanvasRenderingContext2D, line: PvLine, env: PvEnv): CardLayout {
   const { width: W, height: H, dpr } = env;
   const random = rng(line.seed);
   const glyphs = line.glyphs.map(glyph => glyph === '\n' ? ' ' : glyph);
@@ -189,7 +196,7 @@ function cardLayout(g: CanvasRenderingContext2D, line: PvLine, env: PvEnv): Card
   return { kind: 'card', seed: line.seed, T, cx, cy, w, h, frame, flash, glyphs: glyphsOut, units: (unitOf[unitOf.length - 1] ?? 0) + 1, timed, lineH, textX, icon };
 }
 
-function drawCard(g: CanvasRenderingContext2D, L: CardLayout, frame: PvFrame, env: PvEnv, variant: Variant) {
+export function drawCard(g: CanvasRenderingContext2D, L: CardLayout, frame: PvFrame, env: PvEnv, variant: Variant) {
   const { t, exit } = frame, T = L.T, snap = variant.snap && env.motion;
   // II: the window cuts open in two frames instead of easing.
   const open = snap ? (t < 0 ? 0 : t < FRAME ? 0.4 : 1) : easeOutCubic(t / 170);
@@ -229,7 +236,7 @@ function drawCard(g: CanvasRenderingContext2D, L: CardLayout, frame: PvFrame, en
       g.fillStyle = INK; g.fillRect(x, y - L.lineH * 0.36, T * 0.42, L.lineH * 0.72);
     }
     if (L.icon) {
-      const pop = easeOutBack((t - 160) / 280);
+      const pop = 1 + (easeOutBack((t - 160) / 280) - 1) * Math.min(1.5, env.amp);
       haloTile(g, L.icon.x, L.icon.y, L.icon.s * pop * (1 + 0.08 * frame.beat.pulse), clamp01((t - 160) / 120));
     }
   };
@@ -248,7 +255,7 @@ function drawCard(g: CanvasRenderingContext2D, L: CardLayout, frame: PvFrame, en
   const random = rng(L.seed ^ Math.floor(t / (snap ? FRAME : 45)) * 2654435761);
   g.globalAlpha *= 1 - exit * 0.6;
   for (let b = 0; b < bands; b++) {
-    const dx = (random() - 0.5) * amount * T * 1.6 * Math.min(1, glitchOf(env) + 0.3);
+    const dx = (random() - 0.5) * amount * T * 1.6 * Math.min(1, glitchOf(env) + 0.3) * env.amp;
     g.save();
     g.beginPath(); g.rect(-L.w, top + span * b / bands, L.w * 2, span / bands + 0.5); g.clip();
     g.translate(dx, 0); g.scale(scale, sy * scale); content();
@@ -258,7 +265,7 @@ function drawCard(g: CanvasRenderingContext2D, L: CardLayout, frame: PvFrame, en
 
 // ---------- Hero (chorus) ----------
 
-const skyGlyph = (text: string, size: number, k: number, face: Face) => {
+export const skyGlyph = (text: string, size: number, k: number, face: Face) => {
   const w = size * 1.4, h = size * 1.4;
   return sprite(w, h, k, (g, k) => {
     g.font = faceFont(face, size); g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineJoin = 'round';
@@ -271,7 +278,7 @@ const skyGlyph = (text: string, size: number, k: number, face: Face) => {
   });
 };
 /** Pixel-block version of a glyph: downsampled, then alpha-thresholded so blocks stay crisp. */
-const mosaicOf = (source: Sprite, block: number) => sprite(source.w, source.h, 1 / Math.max(1, block), gg => {
+export const mosaicOf = (source: Sprite, block: number) => sprite(source.w, source.h, 1 / Math.max(1, block), gg => {
   gg.imageSmoothingEnabled = true; gg.imageSmoothingQuality = 'high';
   gg.drawImage(source.canvas, 0, 0, source.w, source.h);
   const canvas = gg.canvas, data = gg.getImageData(0, 0, canvas.width, canvas.height);
@@ -283,7 +290,7 @@ const mosaicOf = (source: Sprite, block: number) => sprite(source.w, source.h, 1
   gg.putImageData(data, 0, 0);
 });
 
-const tLineSprite = (text: string, size: number, k: number, face: Face) => {
+export const tLineSprite = (text: string, size: number, k: number, face: Face) => {
   const context = probe();
   if (context) context.font = faceFont(face, size);
   const w = (context?.measureText(text).width ?? size * text.length) + size, h = size * 1.7;
@@ -430,7 +437,7 @@ function drawPatch(g: CanvasRenderingContext2D, P: Patch, S: number, size: numbe
   }
 }
 /** Line entrance (II): white panels slam over the block for two frames, then clear. */
-function burst(g: CanvasRenderingContext2D, L: HeroLayout, t: number) {
+function burst(g: CanvasRenderingContext2D, L: HeroLayout, t: number, env: PvEnv) {
   const f = frameOf(t);
   if (f > 1 || !L.glyphs.length) return;
   const S = L.S;
@@ -441,7 +448,7 @@ function burst(g: CanvasRenderingContext2D, L: HeroLayout, t: number) {
   const panels = [[-0.08, -0.12, 0.62, 1.1], [0.42, -0.04, 0.7, 0.95], [0.12, 0.3, 0.5, 0.8]];
   panels.forEach(([px, py, pw, ph], i) => {
     if (f === 1 && i === 2) return;
-    const jitter = f * S * 0.3 * (random() - 0.5);
+    const jitter = f * S * 0.3 * (random() - 0.5) * env.amp;
     const scale = f === 0 ? 1.08 : 0.7;
     const rx = x0 + w * px + jitter, ry = y0 + h * py, rw = w * pw * scale, rh = h * ph * scale;
     g.fillStyle = 'rgba(8,38,92,0.2)'; g.fillRect(rx + S * 0.06, ry + S * 0.06, rw, rh);
@@ -452,7 +459,7 @@ function burst(g: CanvasRenderingContext2D, L: HeroLayout, t: number) {
 
 function drawHero(g: CanvasRenderingContext2D, L: HeroLayout, frame: PvFrame, env: PvEnv, variant: Variant) {
   const { t, exit } = frame, S = L.S, n = L.glyphs.length, W = env.width;
-  const glitch = glitchOf(env), motion = env.motion, slots = slotsOn(variant, env), snap = variant.snap && motion;
+  const glitch = glitchOf(env), motion = env.motion, slots = slotsOn(variant, env), snap = variant.snap && motion, amp = env.amp;
   const step = Math.min(70, 1300 / Math.max(1, n));
   // Dash streaks drifting left behind the glyphs.
   const streakAlpha = clamp01(t / 300) * (1 - exit) * (0.45 + 0.3 * frame.beat.pulse);
@@ -486,9 +493,9 @@ function drawHero(g: CanvasRenderingContext2D, L: HeroLayout, frame: PvFrame, en
       // Shatter: back to blocks, slices flung sideways.
       g.save(); g.imageSmoothingEnabled = false;
       const third = glyph.mosaic.h / 3;
-      for (let b = 0; b < 3; b++) blitBand(g, glyph.mosaic, b * third, third + 0.5, glyph.x + (b - 1) * gone * S * 0.35 * (glyph.scar < 0 ? -1 : 1), glyph.y - gone * S * 0.1, 1 - gone);
+      for (let b = 0; b < 3; b++) blitBand(g, glyph.mosaic, b * third, third + 0.5, glyph.x + (b - 1) * gone * S * 0.35 * amp * (glyph.scar < 0 ? -1 : 1), glyph.y - gone * S * 0.1 * amp, 1 - gone);
       g.restore();
-      for (const bit of glyph.debris) { g.fillStyle = bit.c; g.globalAlpha = (1 - gone) * 0.9; g.fillRect(glyph.x + bit.dx * (0.6 + gone), glyph.y + bit.dy * (0.6 + gone), bit.s, bit.s); }
+      for (const bit of glyph.debris) { g.fillStyle = bit.c; g.globalAlpha = (1 - gone) * 0.9; g.fillRect(glyph.x + bit.dx * (0.6 + gone) * amp, glyph.y + bit.dy * (0.6 + gone) * amp, bit.s, bit.s); }
       g.globalAlpha = 1;
       return;
     }
@@ -498,11 +505,11 @@ function drawHero(g: CanvasRenderingContext2D, L: HeroLayout, frame: PvFrame, en
       if (f < 1) {
         g.save(); g.imageSmoothingEnabled = false;
         const third = glyph.mosaic.h / 3;
-        for (let b = 0; b < 3; b++) blitBand(g, glyph.mosaic, b * third, third + 0.5, glyph.x + (random() - 0.5) * S * 0.5, glyph.y);
+        for (let b = 0; b < 3; b++) blitBand(g, glyph.mosaic, b * third, third + 0.5, glyph.x + (random() - 0.5) * S * 0.5 * amp, glyph.y);
         g.restore();
       } else {
-        const punch = f === 1 ? 1.14 : 1;
-        const twitch = random() < 0.035 * glitch ? (random() - 0.5) * S * 0.22 : 0;
+        const punch = f === 1 ? 1 + 0.14 * amp : 1;
+        const twitch = random() < 0.035 * glitch ? (random() - 0.5) * S * 0.22 * amp : 0;
         const scar = glyph.scar * S * 0.08 + twitch;
         if (!scar || punch !== 1) blit(g, glyph.sprite, glyph.x, glyph.y, punch * kick);
         else {
@@ -517,13 +524,13 @@ function drawHero(g: CanvasRenderingContext2D, L: HeroLayout, frame: PvFrame, en
       // Decode: crisp pixel blocks with jittering slices.
       g.save(); g.imageSmoothingEnabled = false;
       const third = glyph.mosaic.h / 3;
-      for (let b = 0; b < 3; b++) blitBand(g, glyph.mosaic, b * third, third + 0.5, glyph.x + (random() - 0.5) * S * 0.3 * (1 - p), glyph.y, clamp01(p / 0.12));
+      for (let b = 0; b < 3; b++) blitBand(g, glyph.mosaic, b * third, third + 0.5, glyph.x + (random() - 0.5) * S * 0.3 * amp * (1 - p), glyph.y, clamp01(p / 0.12));
       g.restore();
     } else {
       const settle = motion ? clamp01((p - 0.4) / 0.6) : 1;
-      const scale = (1 + 0.06 * (1 - easeOutCubic(settle))) * kick;
+      const scale = (1 + 0.06 * amp * (1 - easeOutCubic(settle))) * kick;
       // Occasional twitch on a slice while holding.
-      const twitch = motion && random() < 0.035 * glitch ? (random() - 0.5) * S * 0.18 : 0;
+      const twitch = motion && random() < 0.035 * glitch ? (random() - 0.5) * S * 0.18 * amp : 0;
       const scar = glyph.scar * S * 0.08 + twitch;
       if (!scar || scale !== kick) blit(g, glyph.sprite, glyph.x, glyph.y, scale);
       else {
@@ -536,7 +543,7 @@ function drawHero(g: CanvasRenderingContext2D, L: HeroLayout, frame: PvFrame, en
     }
     if (motion && p < 1) for (const bit of glyph.debris) {
       g.fillStyle = bit.c; g.globalAlpha = (1 - p) * 0.9;
-      g.fillRect(glyph.x + bit.dx * p, glyph.y + bit.dy * p, bit.s, bit.s);
+      g.fillRect(glyph.x + bit.dx * p * amp, glyph.y + bit.dy * p * amp, bit.s, bit.s);
       g.globalAlpha = 1;
     }
   });
@@ -547,11 +554,11 @@ function drawHero(g: CanvasRenderingContext2D, L: HeroLayout, frame: PvFrame, en
     if (at === undefined) continue;
     const f = frameOf(t - (at - P.lead * FRAME));
     if (f < 0) continue;
-    if (f === 0) drawPatch(g, P, S, 1.2, 1, 0);
+    if (f === 0) drawPatch(g, P, S, 1 + 0.2 * amp, amp, 0);
     else if (f < 1 + P.lead + P.hold) drawPatch(g, P, S, 1, 0, 0);
     else { const k = f - (1 + P.lead + P.hold); if (k < 2) drawPatch(g, P, S, [0.7, 0.4][k], 0, (k + 1) / 2); }
   }
-  if (burstOn(variant, env)) burst(g, L, t);
+  if (burstOn(variant, env)) burst(g, L, t, env);
   if (L.icon) {
     const pop = easeOutBack((t - 220) / 320);
     haloTile(g, L.icon.x, L.icon.y, L.icon.s * pop * (1 + 0.1 * frame.beat.pulse), clamp01((t - 220) / 120) * (1 - exit));
@@ -566,7 +573,7 @@ function drawHero(g: CanvasRenderingContext2D, L: HeroLayout, frame: PvFrame, en
 
 let hudFace: { title: string; face: Face } | undefined;
 const pad2 = (value: number) => String(Math.floor(value)).padStart(2, '0');
-function backdrop(g: CanvasRenderingContext2D, { scene, current }: { scene: PvScene; current?: PvLine }, env: PvEnv) {
+export function backdrop(g: CanvasRenderingContext2D, { scene, current }: { scene: PvScene; current?: PvLine }, env: PvEnv) {
   if (env.options.hud === false || !current) return;
   const S = env.size, W = env.width, H = env.height;
   const title = scene.title.trim();
@@ -601,9 +608,9 @@ const haloVariant = (id: string, variant: Variant): PvStyle<Layout> => ({
   id, exitMs: 320,
   fonts: [],
   height: (size, translation) => size * 3.1 + (translation ? size * 0.5 : 0),
-  layout: (g, line, env) => line.hero ? heroLayout(g, line, env) : cardLayout(g, line, env),
-  draw: (g, layout, frame, env) => layout.kind === 'hero' ? drawHero(g, layout, frame, env, variant) : drawCard(g, layout, frame, env, variant),
-  backdrop,
+  layout: (g, line, env) => { usePalette(env); return line.hero ? heroLayout(g, line, env) : cardLayout(g, line, env); },
+  draw: (g, layout, frame, env) => { usePalette(env); if (layout.kind === 'hero') drawHero(g, layout, frame, env, variant); else drawCard(g, layout, frame, env, variant); },
+  backdrop: (g, frame, env) => { usePalette(env); backdrop(g, frame, env); },
 });
 export const haloStyle = haloVariant('halo', { snap: false });
 export const haloTypeStyle = haloVariant('halo2', { snap: true });

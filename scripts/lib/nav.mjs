@@ -1,15 +1,17 @@
 /**
  * The control window is routed; previews only exist on the visible page. Old page
- * names still work: `style` opens the renderer page's text tab, `overlay` / `about`
+ * names still work: `style` opens the renderer page's 显示 tab, `overlay` / `about`
  * open settings.
  */
-const aliases = { style: ['renderers', 'text'], overlay: ['settings'], about: ['settings'] };
+const aliases = { style: ['renderers', 'display'], overlay: ['settings'], about: ['settings'] };
 export const go = async (page, id) => {
   const [target, tab] = aliases[id] ?? [id];
   await page.locator(`[data-nav="${target}"]`).click();
   await page.locator(`#page-${target}`).waitFor({ state: 'visible' });
   if (tab) await page.locator(`[data-inspector-tab="${tab}"]`).click();
 };
+/** Opens one inspector tab of the renderer page (字体 font / 颜色 color / 显示 display / 构图 layout …). */
+export const inspectorTab = async (page, tab) => page.locator(`[data-inspector-tab="${tab}"]`).click();
 
 /** Selects a plugin in 全部插件 and returns its detail pane. */
 export const openPlugin = async (page, id) => {

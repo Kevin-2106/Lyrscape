@@ -2,7 +2,6 @@ import type { AppState } from '../../sdk/types';
 import { defaults } from '../../plugins/theme';
 import { AUTO_FAMILIES } from '../../plugins/typeface';
 import type { UiServices } from '../context';
-import { icons } from '../icons';
 import { html, q } from '../kit/dom';
 import { colorField, rangeField, setSelected, setValue, toggleField } from '../kit/fields';
 
@@ -18,35 +17,53 @@ const fontFamilies = [
 ] as const;
 const colorKeys = ['color', 'inactiveColor', 'gradientStart', 'gradientEnd'];
 
-/** Shared text theme (font, colors, details) used by DOM renderers and as the base of canvas renderers. */
-export function mountTextPanel(host: HTMLElement, services: UiServices): { render(state: AppState): void; dispose(): void } {
-  const { ctx, perform } = services;
-  const form = html(`<div class="style-form">
-    <section class="inspector-section"><header class="section-head"><h3>字体与排版</h3></header>
+/**
+ * Parts of the shared text theme. `display` (size, background, translation) applies
+ * to every renderer; `font` and `color` only to renderers that follow the theme.
+ */
+export type ThemeSection = 'font' | 'color' | 'display';
+/** Settings each section owns, so a tab can restore just its own defaults. */
+export const sectionKeys: Record<ThemeSection, (keyof AppState['settings'])[]> = {
+  font: ['fontFamily', 'fontWeight', 'lineHeight', 'textAlign'],
+  color: ['color', 'inactiveColor', 'gradientEnabled', 'gradientStart', 'gradientEnd', 'gradientAngle', 'shadow'],
+  display: ['fontSize', 'backgroundOpacity', 'showTranslation', 'showNextLine'],
+};
+
+const templates: Record<ThemeSection, string> = {
+  font: `<section class="inspector-section" data-theme-section="font"><header class="section-head"><h3>字体与排版</h3></header>
       <label class="field"><span>字体</span><select data-font-select aria-label="预设字体">${fontFamilies.map(([, label], index) => `<option value="${index}">${label}</option>`).join('')}<option value="custom">自定义字体</option></select></label>
       <label class="field custom-font-field" data-custom-font-field hidden><span>CSS 字体族</span><input type="text" data-setting="fontFamily" placeholder='"Arial", "Microsoft YaHei", sans-serif' spellcheck="false"><small>使用本机已安装字体；填写 CSS font-family。不按歌词语言切换。</small></label>
-      ${rangeField('fontSize', '字号', 18, 100, 1)}
       ${rangeField('fontWeight', '字重', 100, 900, 100)}
       ${rangeField('lineHeight', '行高', 1, 2.5, 0.05)}
       <div class="field"><span>对齐方式</span><div class="segmented alignment-tabs" role="group" aria-label="文字对齐"><button data-align="left" aria-label="左对齐">左</button><button data-align="center" aria-label="居中">中</button><button data-align="right" aria-label="右对齐">右</button></div></div>
-    </section>
-    <section class="inspector-section"><header class="section-head"><h3>颜色与渐变</h3></header>
+    </section>`,
+  color: `<section class="inspector-section" data-theme-section="color"><header class="section-head"><h3>文字颜色与渐变</h3></header>
       ${colorField('color', '文字颜色')}
       ${colorField('inactiveColor', '未激活文字')}
       ${toggleField('渐变文字', 'data-setting="gradientEnabled"')}
       <div class="gradient-fields" data-gradient-fields>${colorField('gradientStart', '起始颜色')}${colorField('gradientEnd', '结束颜色')}${rangeField('gradientAngle', '渐变角度', 0, 360, 1)}<div class="gradient-swatch" data-gradient-swatch aria-label="渐变预览"></div></div>
-      <p class="helper color-helper">颜色支持 HEX、RGB / RGBA 与 CSS 颜色名称。</p>
-    </section>
-    <section class="inspector-section"><header class="section-head"><h3>显示细节</h3></header>
       ${rangeField('shadow', '文字阴影', 0, 1, 0.05)}
+      <p class="helper color-helper">颜色支持 HEX、RGB / RGBA 与 CSS 颜色名称。</p>
+    </section>`,
+  display: `<section class="inspector-section" data-theme-section="display"><header class="section-head"><h3>显示</h3></header>
+      ${rangeField('fontSize', '字号', 18, 100, 1)}
       ${rangeField('backgroundOpacity', '背景不透明度', 0, 0.9, 0.05)}
       ${toggleField('显示译文', 'data-setting="showTranslation"')}
       ${toggleField('显示下一行', 'data-setting="showNextLine"')}
-    </section>
-    <div class="form-footer"><span class="helper">自动保存，同步到桌面歌词</span><button class="button-secondary" data-reset-style>${icons.reset}恢复默认样式</button></div>
-  </div>`);
+      <p class="helper">同步到桌面歌词，所有渲染器共用。</p>
+    </section>`,
+};
+
+/**
+ * Shared text theme sections (font, colors, display). `nextLine` decides whether
+ * the 显示下一行 switch is offered; it only affects renderers that draw it.
+ */
+export function mountTextPanel(host: HTMLElement, services: UiServices, sections: ThemeSection[], nextLine = true): { render(state: AppState): void; dispose(): void } {
+  const { ctx, perform } = services;
+  const form = html(`<div class="style-form">${sections.map(section => templates[section]).join('')}</div>`);
   host.append(form);
-  const fontSelect = q<HTMLSelectElement>(form, '[data-font-select]');
+  const fontSelect = form.querySelector<HTMLSelectElement>('[data-font-select]');
+  form.querySelector('[data-setting="showNextLine"]')?.closest('label')?.toggleAttribute('hidden', !nextLine);
   const controller = new AbortController();
   const { signal } = controller;
 
@@ -61,7 +78,7 @@ export function mountTextPanel(host: HTMLElement, services: UiServices): { rende
     element.removeAttribute('aria-invalid');
     void perform(() => ctx.updateSettings({ [key]: value }));
   }, { signal });
-  fontSelect.addEventListener('change', () => {
+  fontSelect?.addEventListener('change', () => {
     const family = fontFamilies[Number(fontSelect.value)]?.[0];
     q(form, '[data-custom-font-field]').hidden = fontSelect.value !== 'custom';
     if (family) void perform(() => ctx.updateSettings({ fontFamily: family }));
@@ -69,12 +86,7 @@ export function mountTextPanel(host: HTMLElement, services: UiServices): { rende
   }, { signal });
   form.addEventListener('click', event => {
     const button = (event.target as Element).closest<HTMLButtonElement>('button');
-    if (!button) return;
-    if (button.dataset.align) void perform(() => ctx.updateSettings({ textAlign: button.dataset.align as AppState['settings']['textAlign'] }));
-    else if (button.matches('[data-reset-style]')) {
-      void services.confirm({ title: '恢复默认样式？', body: '字体、颜色、渐变与显示细节将回到初始值；渲染器选项不受影响。', accept: '恢复默认', danger: true })
-        .then(ok => ok && perform(() => ctx.resetSettings(), '已恢复默认样式。'));
-    }
+    if (button?.dataset.align) void perform(() => ctx.updateSettings({ textAlign: button.dataset.align as AppState['settings']['textAlign'] }));
   }, { signal });
 
   let rendered: AppState['settings'] | undefined;
@@ -95,14 +107,18 @@ export function mountTextPanel(host: HTMLElement, services: UiServices): { rende
         const min = Number(element.min), max = Number(element.max);
         element.style.setProperty('--progress', `${(Number(element.value) - min) / (max - min) * 100}%`);
       });
-      const preset = fontFamilies.findIndex(([family]) => family === settings.fontFamily);
-      if (document.activeElement !== fontSelect) fontSelect.value = preset < 0 ? 'custom' : String(preset);
-      q(form, '[data-custom-font-field]').hidden = fontSelect.value !== 'custom';
-      setSelected(form.querySelectorAll<HTMLButtonElement>('[data-align]'), button => button.dataset.align === settings.textAlign);
-      q(form, '[data-gradient-fields]').classList.toggle('is-disabled', !settings.gradientEnabled);
-      form.querySelectorAll<HTMLInputElement>('[data-gradient-fields] input').forEach(input => { input.disabled = !settings.gradientEnabled; });
-      q(form, '[data-gradient-swatch]').style.background = `linear-gradient(${settings.gradientAngle}deg, ${settings.gradientStart}, ${settings.gradientEnd})`;
-      q<HTMLButtonElement>(form, '[data-reset-style]').disabled = JSON.stringify(settings) === JSON.stringify(defaults);
+      if (fontSelect) {
+        const preset = fontFamilies.findIndex(([family]) => family === settings.fontFamily);
+        if (document.activeElement !== fontSelect) fontSelect.value = preset < 0 ? 'custom' : String(preset);
+        q(form, '[data-custom-font-field]').hidden = fontSelect.value !== 'custom';
+        setSelected(form.querySelectorAll<HTMLButtonElement>('[data-align]'), button => button.dataset.align === settings.textAlign);
+      }
+      const gradient = form.querySelector<HTMLElement>('[data-gradient-fields]');
+      if (gradient) {
+        gradient.classList.toggle('is-disabled', !settings.gradientEnabled);
+        gradient.querySelectorAll<HTMLInputElement>('input').forEach(input => { input.disabled = !settings.gradientEnabled; });
+        q(form, '[data-gradient-swatch]').style.background = `linear-gradient(${settings.gradientAngle}deg, ${settings.gradientStart}, ${settings.gradientEnd})`;
+      }
     },
     dispose() { controller.abort(); form.remove(); },
   };

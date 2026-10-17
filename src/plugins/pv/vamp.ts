@@ -1,14 +1,15 @@
 import { breakRows, clamp01, easeOutCubic, isHan, isKana, isSpace, rng, splitAt } from './core';
 import type { Face } from '../typeface';
 import { blit, blitBand, sprite, type Sprite } from './paint';
-import { faceFont, type PvEnv, type PvFrame, type PvLine, type PvStyle } from './stage';
+import { faceFont, hue, type PvEnv, type PvFrame, type PvLine, type PvStyle } from './stage';
 
 // Vampire: heavy white gothic over crimson. Upcoming characters wait as thin
 // crimson outlines and slam in solid when sung; the line erases from its first
 // character. Short hero lines split huge kanji to the edges with a ticker of the
 // line running between them. Toned down from the PV for everyday songs: no red
 // field, small jitter, and the slab offset only plays during the entrance.
-const WHITE = '#ffffff', CRIMSON = '#d8001c', GHOST = '#ff2a44';
+// Colour options, set before each layout (option changes rebuild layouts and sprites).
+let WHITE = '#ffffff', CRIMSON = '#d8001c', GHOST = '#ff2a44';
 
 interface Glyph { solid: Sprite; ghost: Sprite; x: number; y: number; index: number; rot: number; big: boolean }
 interface Layout {
@@ -56,7 +57,7 @@ const lineSprite = (text: string, size: number, k: number, outline: boolean, fac
 
 function layout(g: CanvasRenderingContext2D, line: PvLine, env: PvEnv): Layout {
   const { width: W, height: H, dpr } = env;
-  const random = rng(line.seed);
+  const random = rng(line.seed), jitter = Number(env.options.jitter ?? 1);
   const glyphs = line.glyphs.map(glyph => glyph === '\n' ? ' ' : glyph);
   const visible = glyphs.filter(glyph => !isSpace(glyph)).length;
   const result: Layout = { hero: line.hero, size: env.size, glyphs: [], seed: line.seed };
@@ -111,7 +112,7 @@ function layout(g: CanvasRenderingContext2D, line: PvLine, env: PvEnv): Layout {
         if (!isSpace(glyphs[i])) {
           const size = S * scaleOf(glyphs[i]);
           result.glyphs.push({ solid: solidGlyph(glyphs[i], size, k, face), ghost: ghostGlyph(glyphs[i], size, k, face),
-            x: x + w / 2, y: y0 + r * lineH + (random() - 0.5) * S * 0.08, index: i, rot: (random() - 0.5) * 0.06, big: false });
+            x: x + w / 2, y: y0 + r * lineH + (random() - 0.5) * S * 0.08 * jitter, index: i, rot: (random() - 0.5) * 0.06 * jitter, big: false });
         }
         x += w;
       }
@@ -131,7 +132,7 @@ function layout(g: CanvasRenderingContext2D, line: PvLine, env: PvEnv): Layout {
 }
 
 function draw(g: CanvasRenderingContext2D, layout: Layout, frame: PvFrame, env: PvEnv) {
-  const { t, exit } = frame, n = layout.glyphs.length, S = layout.size;
+  const { t, exit } = frame, n = layout.glyphs.length, S = layout.size, amp = env.amp;
   const step = Math.min(60, 1400 / Math.max(1, n));
   const kick = 1 + 0.06 * frame.beat.pulse;
   if (layout.echo) {
@@ -153,15 +154,15 @@ function draw(g: CanvasRenderingContext2D, layout: Layout, frame: PvFrame, env: 
     const at = frame.wordAt(glyph.index);
     const fillAt = at !== undefined ? Math.max(0, at) + (i % 4) * 12 : 120 + i * step;
     const f = clamp01((t - fillAt) / 110);
-    const y = glyph.y + gone * S * 0.18;
+    const y = glyph.y + gone * S * 0.18 * amp;
     if (f < 1) blit(g, glyph.ghost, glyph.x, y, 1, glyph.rot, outline * (1 - f) * (1 - gone));
     if (f <= 0) return;
-    const pop = 1 + 0.28 * (1 - easeOutCubic(f));
+    const pop = 1 + 0.28 * amp * (1 - easeOutCubic(f));
     if (glyph.big && t - fillAt < 260) {
       // Slab entrance: three horizontal cuts slide in from alternating sides and lock.
       const e = easeOutCubic((t - fillAt) / 260), band = glyph.solid.h / 3;
       for (let b = 0; b < 3; b++) {
-        const dx = (b % 2 ? 1 : -1) * (1 - e) * S * 0.22;
+        const dx = (b % 2 ? 1 : -1) * (1 - e) * S * 0.22 * amp;
         blitBand(g, glyph.solid, b * band, band + 0.5, glyph.x + dx, y, f * (1 - gone));
       }
       return;
@@ -178,5 +179,9 @@ export const vampStyle: PvStyle<Layout> = {
   id: 'vamp', exitMs: 360,
   fonts: [],
   height: (size, translation) => size * 2.7 + (translation ? size * 0.5 : 0),
-  layout, draw,
+  layout: (g, line, env) => {
+    WHITE = hue(env, 'face', '#ffffff'); CRIMSON = hue(env, 'shadow', '#d8001c'); GHOST = hue(env, 'ghost', '#ff2a44');
+    return layout(g, line, env);
+  },
+  draw,
 };
