@@ -6,7 +6,7 @@
 
 ## 项目状态
 
-2026-10-13：第一版 Windows 应用已实现，仓库保持 private。普通文字 renderer 支持逐行/逐字歌词，设置可实时调整 CSS 颜色、渐变与字体；AMLL V1/V2 接入和桌面透明 overlay 已实现。当前插件宿主运行显式注册的可信 TypeScript 插件，尚不支持任意第三方包安装或隔离运行。
+2026-10-13：第一版 Windows 应用已实现。2026-10-17 起仓库公开，安装包见 [Releases](https://github.com/Kevin-2106/Lyrscape/releases)，使用指南与插件页见 GitHub Pages（[发布说明](docs/release.md)）。普通文字 renderer 支持逐行/逐字歌词，设置可实时调整 CSS 颜色、渐变与字体；AMLL V1/V2 接入和桌面透明 overlay 已实现。当前插件宿主运行显式注册的可信 TypeScript 插件，尚不支持任意第三方包安装或隔离运行。
 
 ## 运行
 
@@ -19,11 +19,13 @@ npm run desktop:dev
 
 仅在浏览器查看设置与歌词预览：`npm run dev`。浏览器模式不提供原生 overlay 或 AMLL 监听服务。
 
-构建独立 exe：`npm run desktop:build`，产物位于 `src-tauri/target/release/lyrscape.exe`。构建安装包使用 `npm run desktop:package`。
+构建独立 exe：`npm run desktop:build`，产物位于 `src-tauri/target/release/lyrscape.exe`。构建安装包使用 `npm run desktop:package`。发布（tag → 安装包 / 便携版 / 示例插件的草稿 Release）、GitHub Pages 使用指南与插件页、安装后插件的存放位置见 [发布、安装与插件分发](docs/release.md)。
+
+应用内「应用 › 调试」页（正式版也有）显示播放采样、AMLL 原始消息、歌词解析结果、节拍与 PCM 分析、插件状态和错误，并可复制诊断信息。
 
 ## 第一版功能
 
-- 普通文字歌词；LRC、增强 LRC、常用歌词 TTML、纯文本导入，逐字数据按真实提供的时间显示。
+- 普通文字歌词；LRC、增强 LRC、双语 LRC（紧跟原文、时间戳相同的行作为译文，再一行作为音译）、常用歌词 TTML、纯文本导入，逐字数据按真实提供的时间显示。
 - CSS 颜色值、未激活文字颜色、双色线性渐变与角度。
 - 按歌词语言自动选择的打包字体（简体 / 繁体 / 日文不混排，见 [字体](docs/fonts.md)）、本机字体/自定义 font-family、字号、字重、行高、对齐、阴影、背景透明度、译文和下一行开关。
 - 样式自动保存，设置与 overlay 共用时间基准和状态。
@@ -63,6 +65,7 @@ AMLL adapter 与 AMLL 渲染器是两个独立插件；接入 AMLL 协议不要�
 - [内存排查、优化与原生对比](docs/memory-optimization.md)
 - [常驻内存、按需窗口与字体子集](docs/memory-footprint.md)
 - [关闭到托盘与主窗口资源释放](docs/tray-lifecycle.md)
+- [发布、安装与插件分发（Release 工作流、GitHub Pages、插件目录）](docs/release.md)
 - [插件编写手册（.lyrx 包格式、渲染器 / 特效、打包与发布）](docs/plugin-authoring.md)
 - [插件开发与可编译示例](docs/plugin-development.md)
 - [交接清单](docs/handoff.md)
@@ -73,4 +76,4 @@ AMLL adapter 与 AMLL 渲染器是两个独立插件；接入 AMLL 协议不要�
 
 ## 参考与许可
 
-参考 [AMLL](https://github.com/amll-dev/applemusic-like-lyrics)、[AMLL WS Protocol](https://github.com/amll-dev/ws-protocol) 和 [Lyricify](https://github.com/WXRIW/Lyricify-App)。AMLL wire codec 根据公开协议独立实现，未复制或依赖 AMLL/Lyricify 的实现；应用依赖及版本记录在 npm/Cargo lockfile。Lyrscape 的许可证尚未选定；以后采用第三方实现前须确认具体版本的许可信息，详见 adapter 调研。
+参考 [AMLL](https://github.com/amll-dev/applemusic-like-lyrics)、[AMLL WS Protocol](https://github.com/amll-dev/ws-protocol) 和 [Lyricify](https://github.com/WXRIW/Lyricify-App)。AMLL wire codec 根据公开协议独立实现，未复制或依赖 AMLL/Lyricify 的实现；应用依赖及版本记录在 npm/Cargo lockfile。Lyrscape 以 [MIT License](LICENSE) 发布；除非另有说明，提交的贡献同样按 MIT 许可发布。随应用打包的字体（SIL OFL 1.1）与 Rust / npm 依赖的许可见 [THIRD_PARTY_NOTICES.txt](THIRD_PARTY_NOTICES.txt)，应用内「设置 › 关于」也可查看；依赖变化后运行 `node scripts/build-notices.mjs` 重新生成（发布流水线会自动重新生成）。第三方插件由作者自选许可。采用第三方实现前须确认具体版本的许可信息，详见 adapter 调研。

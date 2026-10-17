@@ -1,4 +1,5 @@
-import type { AppState, PluginManagement, GlobalShortcuts } from '../sdk/types';
+import type { AppState, BeatDetector, LyricDocument, PcmFrame, PluginManagement, GlobalShortcuts } from '../sdk/types';
+import type { DebugJournal } from '../plugins/debug';
 import type { ConfirmOptions } from './kit/dialog';
 
 export type MaybeAsync = void | Promise<void>;
@@ -10,6 +11,15 @@ export interface UiContext {
   appVersion: string;
   getState(): AppState;
   getPosition?(): number;
+  /** Read-only views for the 调试 page (available in release builds too). */
+  debug?: {
+    journal: DebugJournal;
+    beat(): BeatDetector | undefined;
+    /** The latest PCM frame (if one arrived within a second). */
+    pcm(): PcmFrame | undefined;
+    /** Parses lyric text without importing it. Throws like an import would. */
+    parse(text: string, name?: string): LyricDocument;
+  };
   subscribe(listener: (state: AppState) => void): () => void;
   /** Mounts the active renderer into `root`; the returned function releases it. */
   mountPreview(root: HTMLElement): () => void;
@@ -25,7 +35,7 @@ export interface UiContext {
   resetEverything(): void;
 }
 
-export type PageId = 'lyrics' | 'renderers' | 'effects' | 'plugins' | 'settings';
+export type PageId = 'lyrics' | 'renderers' | 'effects' | 'plugins' | 'settings' | 'debug';
 export type ToastKind = 'info' | 'success' | 'error';
 
 /** Shell facilities shared by every page. */

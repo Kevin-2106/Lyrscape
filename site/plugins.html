@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>插件 — Lyrscape</title>
+<link rel="icon" href="icon.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top"><div class="top-inner">
+  <a class="brand" href="./"><img src="icon.png" alt="">Lyrscape</a>
+  <nav class="links"><a href="./">首页</a><a href="guide.html">使用指南</a><a href="plugins.html" aria-current="page">插件</a><a href="https://github.com/Kevin-2106/Lyrscape">GitHub</a></nav>
+</div></header>
+<main class="doc">
+  <h1>插件</h1>
+  <p>下载 <code>.lyrx</code> 文件，在 Lyrscape「插件 › 全部插件 → 导入插件」中选择它，或直接拖进窗口（<a href="guide.html#plugins">详细步骤</a>）。内置的渲染器（普通文字、Aurora、Apple Music 风格和各种 PV 风格）已经随应用安装，不需要在这里下载。</p>
+  <div class="callout">插件与应用同权限运行，没有沙箱。本页插件来自仓库中审阅过的源码，由构建流程打包；导入时应用会再次校验完整性（显示「完整性：已校验」）。</div>
+  <input class="search" type="search" placeholder="搜索名称、ID 或标签" aria-label="搜索插件" data-search>
+  <div class="grid" data-list><p class="note">加载中…</p></div>
+  <p class="note">想发布自己的插件？参考 <a href="https://github.com/Kevin-2106/Lyrscape/blob/main/docs/plugin-authoring.md">插件编写手册</a>，提交 PR 把入口文件加入 <code>site/gallery.json</code>。</p>
+</main>
+<footer><div class="top-inner">Lyrscape · <a href="https://github.com/Kevin-2106/Lyrscape/issues">反馈问题</a> · MIT License</div></footer>
+<script src="plugins.js"></script>
+</body>
+</html>

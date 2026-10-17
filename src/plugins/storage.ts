@@ -5,8 +5,9 @@ import { PLUGIN_ID } from './registry';
 export interface PluginFiles { id: string; javascript: string; css: string }
 
 /**
- * Where installed plugins live. The desktop app keeps them as plain files in the
- * `plugins` folder beside the exe (editable, portable); the browser preview keeps
+ * Where installed plugins live. The desktop app keeps them as plain files in a
+ * `plugins` folder (beside the exe when that folder exists, otherwise in the app's
+ * per-user data folder); the browser preview keeps
  * them in IndexedDB. Both are read by the same catalog rescan.
  */
 export interface PluginStorage {
@@ -20,7 +21,7 @@ export interface PluginStorage {
 }
 
 const nativeStorage: PluginStorage = {
-  label: 'exe 旁的 plugins 文件夹',
+  label: '插件文件夹',
   list: () => native<string[]>('plugin_catalog'),
   read: id => native<PluginFiles>('plugin_source', { id }),
   write: files => native('plugin_install', { id: files.id, javascript: files.javascript, css: files.css }),

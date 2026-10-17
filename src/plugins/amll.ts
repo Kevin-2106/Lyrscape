@@ -4,6 +4,7 @@ import type { Store } from '../kernel/store';
 import type { Timeline } from '../sdk/types';
 import { parseAmllStructured, parseLyrics } from './parsers';
 import { desktop, native, onEvent } from '../platform';
+import { debugJournal } from './debug';
 
 export interface AmllAdapter { start(port: number): Promise<void>; stop(): Promise<void>; snapshot(): PlaybackSnapshot }
 const emptyLyrics = { timingMode: 'none' as const, lines: [] };
@@ -54,6 +55,7 @@ export function amllPlugin(store: Store<AppState>, background = false): Plugin {
       if (desktop) {
         ctx.own(await onEvent<{ connectionId: string; connected: boolean }>('amll-connection', e => {
           if (!active) return;
+          if (ownsControl) debugJournal.record('amll', e.connected ? 'connected' : 'disconnected', `${e.connected ? '连接' : '断开'} ${e.connectionId}`, e);
           if (e.connected) { clients.add(e.connectionId); if (!snapshots.has(e.connectionId)) snapshots.set(e.connectionId, blank()); }
           else { clients.delete(e.connectionId); snapshots.delete(e.connectionId); }
           // Each connection is isolated. First connection owns the single baseline session.
@@ -67,6 +69,10 @@ export function amllPlugin(store: Store<AppState>, background = false): Plugin {
         }));
         const receive = (e: WireMessage) => {
           if (!active) return;
+          if (ownsControl) {
+            const update = typeof e.payload?.value?.update === 'string' ? e.payload.value.update : e.payload?.type ?? 'unknown';
+            debugJournal.record('amll', update, `#${e.sequence ?? '-'} ${update} · ${e.connectionId}`, e);
+          }
           if (e.sequence !== undefined) {
             if (e.sequence <= (sequences.get(e.connectionId) ?? -1)) return;
             sequences.set(e.connectionId, e.sequence);
@@ -97,7 +103,10 @@ export function amllPlugin(store: Store<AppState>, background = false): Plugin {
                 setSession({ ...state, lyrics, error: undefined }, e.connectionId); break;
               }
             }
-          } catch (cause) { if (ownsControl) error(cause instanceof Error ? cause.message : String(cause)); }
+          } catch (cause) {
+            const message = cause instanceof Error ? cause.message : String(cause);
+            if (ownsControl) { error(message); debugJournal.record('amll', 'rejected', `处理失败：${message}`, { message, sequence: e.sequence, update: value.update }); }
+          }
         };
         ctx.own(await onEvent<WireMessage>('amll-message', e => { if (hydrating) pending.push(e); else receive(e); }));
         if (background) ctx.own(await onEvent<boolean>('control-presence', present => {
@@ -114,7 +123,10 @@ export function amllPlugin(store: Store<AppState>, background = false): Plugin {
         pending.length = 0; hydrating = false;
         if (selected) session = snapshots.get(selected) ?? session;
         applySession(); selectAudio();
-        ctx.own(await onEvent<{ message: string }>('amll-error', e => { if (active && ownsControl) error(e.message); }));
+        ctx.own(await onEvent<{ message: string }>('amll-error', e => {
+          if (!active || !ownsControl) return;
+          error(e.message); debugJournal.record('amll', 'error', e.message, e);
+        }));
       }
       const adapter: AmllAdapter = {
         snapshot: () => session,

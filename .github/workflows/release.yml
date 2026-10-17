@@ -1,0 +1,86 @@
+# Builds the Windows installer, a portable zip and the example plugin packages,
+# and attaches them to a draft GitHub Release. Trigger: push a tag `vX.Y.Z`
+# (must match package.json and src-tauri/tauri.conf.json), or run manually to
+# get the files as a workflow artifact without a release.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Check version
+        id: version
+        shell: pwsh
+        run: |
+          $pkg = (Get-Content package.json | ConvertFrom-Json).version
+          $tauri = (Get-Content src-tauri/tauri.conf.json | ConvertFrom-Json).version
+          if ($pkg -ne $tauri) { throw "package.json ($pkg) and tauri.conf.json ($tauri) disagree" }
+          if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne "v$pkg") { throw "tag $env:GITHUB_REF_NAME does not match version $pkg" }
+          "version=$pkg" >> $env:GITHUB_OUTPUT
+
+      - run: npm ci
+      - run: npm test
+      - run: cargo test --manifest-path src-tauri/Cargo.toml
+
+      - name: Third-party notices
+        run: node scripts/build-notices.mjs
+
+      - name: Build installer
+        run: npx tauri build
+
+      - name: Collect release files
+        shell: pwsh
+        run: |
+          $v = '${{ steps.version.outputs.version }}'
+          New-Item -ItemType Directory -Force release | Out-Null
+          Copy-Item "src-tauri/target/release/bundle/nsis/Lyrscape_${v}_x64-setup.exe" release/
+          # Portable: the exe plus an empty plugins folder, which makes the app keep plugins beside the exe.
+          $portable = "release/Lyrscape_${v}_x64_portable"
+          New-Item -ItemType Directory -Force "$portable/plugins" | Out-Null
+          Copy-Item src-tauri/target/release/lyrscape.exe "$portable/Lyrscape.exe"
+          Copy-Item LICENSE, THIRD_PARTY_NOTICES.txt $portable/
+          Set-Content "$portable/plugins/README.txt" "Installed plugins are stored here (portable mode). Delete this folder to store them in %LOCALAPPDATA%\io.github.kevin2106.lyrscape\plugins instead."
+          Compress-Archive -Path "$portable/*" -DestinationPath "release/Lyrscape_${v}_x64_portable.zip"
+          Remove-Item -Recurse $portable
+          foreach ($entry in (Get-Content site/gallery.json | ConvertFrom-Json)) { node scripts/pack-plugin.mjs $entry --out release }
+          Copy-Item THIRD_PARTY_NOTICES.txt release/
+          Get-ChildItem release | ForEach-Object { "{0}  {1}" -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower(), $_.Name } | Set-Content release/SHA256SUMS.txt
+          Get-ChildItem release
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lyrscape-${{ steps.version.outputs.version }}
+          path: release/*
+
+      - name: Draft release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          name: Lyrscape ${{ steps.version.outputs.version }}
+          files: release/*
+          body: |
+            Windows 10 / 11（x64）。下载 `Lyrscape_${{ steps.version.outputs.version }}_x64-setup.exe` 安装（无需管理员权限，升级时直接运行新版安装包，设置与插件保留）；
+            或下载 portable 压缩包解压到可写目录直接运行。安装包未签名，Windows SmartScreen 可能提示「已保护你的电脑」，选择「更多信息 → 仍要运行」。
+            `.lyrx` 是示例插件，在「插件 › 全部插件 → 导入插件」中安装。文件校验值见 SHA256SUMS.txt。

@@ -53,8 +53,13 @@ node scripts/smoke-browser.mjs
 node scripts/smoke-plugins.mjs
 node scripts/smoke-overlay-layout.mjs
 node scripts/smoke-pv.mjs
+node scripts/smoke-debug.mjs          # 调试页；设置 LYRSCAPE_CDP 时另测 AMLL 原始消息
 npm run desktop:build
+# 安装包 → 导入插件 → 升级 → 卸载的端到端检查（见 docs/release.md）
+npm run desktop:package; node scripts/smoke-install.mjs
 ```
+
+插件目录：exe 旁有 `plugins\` 时使用它（`builds\Lyrscape.exe` 与 `npm run plugins:build` 生成的 `builds\plugins\` 正是这种情况），否则使用 `%LOCALAPPDATA%\io.github.kevin2106.lyrscape\plugins\`；隔离实例可用 `LYRSCAPE_DATA_DIR` 指定。
 
 `src-tauri/target/release/lyrscape.exe` 是 release 产物；`builds/Lyrscape.exe` 是交付副本，**构建不会自动复制**。运行中的 exe 可能被 Windows 锁定；先保存配置 / 布局，确认进程路径，保留旧 exe，再替换。不要直接关闭未知 PID。原生更新后必须重新启动进程，reload WebView 不能更新已编入 exe 的资源。
 

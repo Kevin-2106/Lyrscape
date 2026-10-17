@@ -1,4 +1,5 @@
 import type { PageDefinition } from '../context';
+import { debugPage } from './debug';
 import { effectsPage } from './effects';
 import { lyricsPage } from './lyrics';
 import { pluginsPage } from './plugins';
@@ -10,4 +11,4 @@ import { settingsPage } from './settings';
  * that people interact with daily get their own page under 插件; everything else
  * is managed in 全部插件.
  */
-export const pages: PageDefinition[] = [lyricsPage, renderersPage, effectsPage, pluginsPage, settingsPage];
+export const pages: PageDefinition[] = [lyricsPage, renderersPage, effectsPage, pluginsPage, settingsPage, debugPage];

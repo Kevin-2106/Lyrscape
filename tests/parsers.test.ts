@@ -19,11 +19,25 @@ describe('plain text and LRC', () => {
   });
 
   it('uses the next distinct time for simultaneous lines and retains clear markers', () => {
-    const result = parseLyrics('[00:01]one\n[00:01]translation\n[00:03]\n[00:05]next');
-    expect(result.lines[0].endMs).toBe(3000);
-    expect(result.lines[1].endMs).toBe(3000);
-    expect(result.lines[2].text).toBe('');
-    expect(result.lines[2].endMs).toBe(5000);
+    const result = parseLyrics('[00:01]one\n[00:03]\n[00:01]late duplicate\n[00:05]next');
+    expect(result.lines.map(l => [l.text, l.startMs, l.endMs])).toEqual([['one', 1000, 3000], ['late duplicate', 1000, 3000], ['', 3000, 5000], ['next', 5000, undefined]]);
+  });
+
+  it('reads a following line with the same timestamps as translation, then romanization', () => {
+    const result = parseLyrics('[00:01.00]<00:01.00>今日<00:01.50>も<00:02.00>\n[00:01.00] Today too \n[00:01.00]kyou mo\n[00:03.00][00:09.00]またね\n[00:03.00][00:09.00]See you\n[00:05.00]二行目\n[00:05.50]別の行');
+    expect(result.timingMode).toBe('word');
+    expect(result.lines.map(l => [l.text, l.startMs, l.translation, l.romanization])).toEqual([
+      ['今日も', 1000, 'Today too', 'kyou mo'], ['またね', 3000, 'See you', undefined], ['二行目', 5000, undefined, undefined],
+      ['別の行', 5500, undefined, undefined], ['またね', 9000, 'See you', undefined],
+    ]);
+    expect(result.lines[0].words?.map(w => w.text)).toEqual(['今日', 'も']);
+    expect(result.lines[0].endMs).toBe(2000);
+  });
+
+  it('keeps same-timestamp lines that are not a plain annotation of the previous line', () => {
+    // Different stamp sets, a timed second line, and an empty first line are not translations.
+    const result = parseLyrics('[00:01]A\n[00:01][00:02]B\n[00:04]<00:04>C<00:05>\n[00:04]<00:04>D<00:05>\n[00:06]\n[00:06]E');
+    expect(result.lines.map(l => [l.text, l.translation])).toEqual([['A', undefined], ['B', undefined], ['B', undefined], ['C', undefined], ['D', undefined], ['', undefined], ['E', undefined]]);
   });
 
   it('preserves exact Enhanced LRC word spacing and final boundary', () => {

@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>使用指南 — Lyrscape</title>
+<link rel="icon" href="icon.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top"><div class="top-inner">
+  <a class="brand" href="./"><img src="icon.png" alt="">Lyrscape</a>
+  <nav class="links"><a href="./">首页</a><a href="guide.html" aria-current="page">使用指南</a><a href="plugins.html">插件</a><a href="https://github.com/Kevin-2106/Lyrscape">GitHub</a></nav>
+</div></header>
+<main class="doc">
+  <h1>使用指南</h1>
+  <nav class="toc"><ol>
+    <li><a href="#install">下载与安装</a></li>
+    <li><a href="#update">更新与卸载</a></li>
+    <li><a href="#amll">连接 AMLL Player</a></li>
+    <li><a href="#overlay">桌面歌词</a></li>
+    <li><a href="#plugins">安装插件</a></li>
+    <li><a href="#folder">插件文件放在哪里</a></li>
+    <li><a href="#debug">调试与反馈问题</a></li>
+    <li><a href="#develop">编写插件</a></li>
+    <li><a href="#faq">常见问题</a></li>
+  </ol></nav>
+
+  <h2 id="install">1. 下载与安装</h2>
+  <p>在 <a href="https://github.com/Kevin-2106/Lyrscape/releases/latest">Releases</a> 页面选择一种：</p>
+  <table>
+    <tr><th>文件</th><th>适合</th><th>说明</th></tr>
+    <tr><td><code>Lyrscape_x.y.z_x64-setup.exe</code></td><td>大多数人</td><td>安装到 <code>%LOCALAPPDATA%\Lyrscape</code>，不需要管理员权限，创建开始菜单快捷方式。缺少 WebView2 运行时会自动下载。</td></tr>
+    <tr><td><code>Lyrscape_x.y.z_x64_portable.zip</code></td><td>U 盘 / 不想安装</td><td>解压到任意<strong>可写</strong>的文件夹后运行 <code>Lyrscape.exe</code>。插件保存在 exe 旁的 <code>plugins</code> 文件夹。需要系统已有 WebView2（Windows 11 自带）。</td></tr>
+    <tr><td><code>SHA256SUMS.txt</code></td><td>校验</td><td>PowerShell：<code>Get-FileHash .\文件名 -Algorithm SHA256</code>，与其中的值比对。</td></tr>
+  </table>
+  <div class="callout">安装包目前没有代码签名。首次运行时 Windows 可能显示「Windows 已保护你的电脑」：点「更多信息」→「仍要运行」。只从本页面或 GitHub Releases 下载。</div>
+  <p>安装时可以修改安装位置；请选择你有写入权限的文件夹（默认位置即可），不要装到 <code>C:\Program Files</code>。</p>
+
+  <h2 id="update">2. 更新与卸载</h2>
+  <ul>
+    <li><strong>更新</strong>：下载新版安装包直接运行，它会先移除旧版程序再安装。设置、选择的渲染器和已安装的插件都会保留。Lyrscape 正在运行时，安装包会提示先关闭它。</li>
+    <li><strong>卸载</strong>：Windows 设置 → 应用 → Lyrscape → 卸载。卸载页面的「删除应用数据」勾选后，会一并删除设置、WebView 缓存和已安装的插件（<code>%LOCALAPPDATA%\io.github.kevin2106.lyrscape</code>）；不勾选则保留，重装后还在。</li>
+    <li><strong>便携版</strong>：替换文件夹里的 <code>Lyrscape.exe</code> 即可更新，保留 <code>plugins</code> 文件夹。</li>
+  </ul>
+
+  <h2 id="amll">3. 连接 AMLL Player</h2>
+  <ol>
+    <li>打开 Lyrscape 的「歌词」页，在「播放来源」中选择 <strong>AMLL</strong>，端口保持 <code>11444</code>，点「启动服务」。状态显示「等待连接」。</li>
+    <li>在 AMLL Player（或支持 AMLL WS Protocol 的播放器插件，如网易云的 AMLL WS Connector）里，把连接地址设为 <code>ws://localhost:11444</code> 并启用。</li>
+    <li>状态变为「已连接」后，曲目、歌词和进度会实时同步。播放器开启音频发送时，「特效 › 跟随节拍」也会生效。</li>
+  </ol>
+  <p>连不上时，先看「调试 › AMLL 原始数据」里有没有「connected」和 <code>setMusic</code> / <code>setLyric</code> 消息（见 <a href="#debug">调试</a>）。端口被占用时换一个端口，并在播放器里同步修改。</p>
+
+  <h2 id="overlay">4. 桌面歌词</h2>
+  <ul>
+    <li>右上角「桌面歌词」开关显示透明歌词窗口；「设置」页可以开关置顶、鼠标穿透和调整边框。</li>
+    <li>关闭鼠标穿透后，拖动歌词中间移动窗口，拖动左右边缘调整宽度；高度自动适配。</li>
+    <li>全局快捷键（可在「设置」中修改）在任何程序里都能显示 / 隐藏歌词、切换穿透。</li>
+    <li>关闭主窗口会最小化到托盘，桌面歌词继续显示；从托盘图标退出。</li>
+  </ul>
+
+  <h2 id="plugins">5. 安装插件</h2>
+  <ol>
+    <li>在 <a href="plugins.html">插件</a> 页下载 <code>.lyrx</code> 文件。</li>
+    <li>Lyrscape →「插件 › 全部插件」→「导入插件」选择文件，或者直接把文件拖进窗口。</li>
+    <li>确认对话框会显示插件 ID、作者、大小和「完整性：已校验」。确认后插件立即在主窗口和桌面歌词中运行，不需要重启。</li>
+    <li>渲染器插件到「插件 › 渲染器」选用；特效插件在「插件 › 特效」中开关。</li>
+  </ol>
+  <ul>
+    <li><strong>更新插件</strong>：导入同一 ID 的新版本即可，配置和选择保留；失败会自动恢复旧版。</li>
+    <li><strong>卸载插件</strong>：在插件详情中点「卸载」。如果它是当前渲染器，会回到普通文字。</li>
+    <li><strong>导出</strong>：插件详情 →「导出」，连同当前配置保存为 <code>.lyrx</code>（在「下载」文件夹）。</li>
+  </ul>
+  <div class="callout">插件与应用同权限运行，没有沙箱，可以读取歌词、播放状态和设置。只安装你信任的来源提供的插件。</div>
+
+  <h2 id="folder">6. 插件文件放在哪里</h2>
+  <table>
+    <tr><th>情况</th><th>位置</th></tr>
+    <tr><td>安装版</td><td><code>%LOCALAPPDATA%\io.github.kevin2106.lyrscape\plugins\</code></td></tr>
+    <tr><td>便携版 / exe 旁已有 <code>plugins</code> 文件夹</td><td>exe 旁的 <code>plugins\</code></td></tr>
+  </table>
+  <p>「全部插件」页的「打开插件文件夹」按钮直接打开它。每个插件是 <code>&lt;插件 ID&gt;.mjs</code> 和可选的同名 <code>.css</code>；直接编辑后在插件详情里选「本地插件文件 → 热重载」即可生效。</p>
+
+  <h2 id="debug">7. 调试与反馈问题</h2>
+  <p>左侧「应用 › 调试」页在正式版中也可用：</p>
+  <table>
+    <tr><th>页签</th><th>能看到什么</th></tr>
+    <tr><td>播放</td><td>播放来源、AMLL 服务状态、曲目、播放器最后报告的位置与「采样年龄」、时间轴计算出的位置、当前行。</td></tr>
+    <tr><td>AMLL 原始数据</td><td>播放器发来的每条消息（解码后的 JSON）、连接 / 断开事件和处理失败的原因。可隐藏高频的 <code>progress</code>、暂停记录、复制全部。</td></tr>
+    <tr><td>歌词解析</td><td>当前歌词被解析成了什么：时间模式、行数、逐字片段、识别的语言，以及每一行的逐字时间。可以粘贴歌词「试解析」而不替换当前歌词。</td></tr>
+    <tr><td>节拍与音频</td><td>节拍检测的 BPM、置信度、相位与脉冲曲线，频带 / 音级 / 波形，以及最近一帧 PCM 的来源、序号、丢帧与峰值。</td></tr>
+    <tr><td>插件</td><td>每个插件的状态、来源、提供的服务与错误。</td></tr>
+    <tr><td>事件</td><td>未捕获的错误、插件加载失败。</td></tr>
+  </table>
+  <p>报告问题时，点右上角「复制诊断信息」，粘贴到 <a href="https://github.com/Kevin-2106/Lyrscape/issues">Issues</a>。诊断信息包含版本、播放状态、歌词统计、插件状态和最近的 AMLL 消息（不含高频进度），不包含歌词正文的整份文档；如果最近的 <code>setLyric</code> 消息里有你不想公开的歌词，请先删掉。</p>
+
+  <h2 id="develop">8. 编写插件</h2>
+  <p>插件是一个导出 <code>manifest</code> 和 <code>Plugin</code> 对象的 ES 模块，用 <code>npm run plugin:pack</code> 打包成 <code>.lyrx</code>。完整说明见仓库中的 <a href="https://github.com/Kevin-2106/Lyrscape/blob/main/docs/plugin-authoring.md">插件编写手册</a>，示例见 <code>examples/plugins/wave/</code>。想让插件出现在本站的插件页，提交 PR 把入口文件加到 <code>site/gallery.json</code>。</p>
+
+  <h2 id="faq">9. 常见问题</h2>
+  <h3>导入插件提示「完整性校验失败」</h3>
+  <p>文件在下载或编辑后被改动了。重新下载；自己修改过的插件请用 <code>npm run plugin:pack</code> 重新打包。</p>
+  <h3>插件无法安装 / 提示无法创建 plugins 目录</h3>
+  <p>便携版放在了只读位置（如 <code>C:\Program Files</code> 或光盘）。移到可写的文件夹，或删掉 exe 旁的 <code>plugins</code> 文件夹改用应用数据目录。</p>
+  <h3>桌面歌词不显示</h3>
+  <p>确认右上角「桌面歌词」已打开；窗口可能在已断开的显示器上，可以在「设置」中关闭再打开，或按全局快捷键。</p>
+  <h3>歌词出现得比演唱晚</h3>
+  <p>看「调试 › 播放」的「采样年龄」：正常播放时它应该在几百毫秒内反复归零。如果一直增长，说明播放器没有持续发送进度。</p>
+</main>
+<footer><div class="top-inner">Lyrscape · <a href="https://github.com/Kevin-2106/Lyrscape/issues">反馈问题</a> · MIT License</div></footer>
+</body>
+</html>

@@ -1,6 +1,6 @@
 use serde::Serialize;
 use std::{fs, io::Read, path::Path};
-use tauri::WebviewWindow;
+use tauri::{Manager, WebviewWindow};
 
 const MAX_CATALOG: usize = 128;
 const MAX_JS: u64 = 2 * 1024 * 1024;
@@ -52,9 +52,9 @@ fn plugins_root(directory: &Path) -> Result<std::path::PathBuf, String> {
     let root = base
         .join("plugins")
         .canonicalize()
-        .map_err(|_| "请先生成 exe 旁的 plugins 目录（npm run plugins:build）".to_owned())?;
+        .map_err(|_| "插件文件夹不存在：先导入插件，或运行 npm run plugins:build".to_owned())?;
     if !root.starts_with(&base) {
-        return Err("plugins 目录不能链接到 exe 目录之外".into());
+        return Err("plugins 目录不能链接到所在目录之外".into());
     }
     Ok(root)
 }
@@ -180,6 +180,28 @@ fn exe_directory() -> Result<std::path::PathBuf, String> {
     Ok(exe.parent().ok_or("无法找到 exe 目录")?.to_owned())
 }
 
+/// The directory that holds `plugins/`. A `plugins` folder beside the exe wins
+/// (portable copies and development builds, see `npm run plugins:build`); an
+/// installed app keeps plugins in its per-user data folder, which is always
+/// writable, survives updates and goes with 「删除应用数据」 on uninstall.
+/// `LYRSCAPE_DATA_DIR` overrides both (isolated test instances).
+fn storage_base(window: &WebviewWindow) -> Result<std::path::PathBuf, String> {
+    if let Some(dir) = std::env::var_os("LYRSCAPE_DATA_DIR").filter(|dir| !dir.is_empty()) {
+        fs::create_dir_all(&dir).map_err(|e| format!("无法创建 LYRSCAPE_DATA_DIR：{e}"))?;
+        return Ok(dir.into());
+    }
+    let exe = exe_directory()?;
+    if exe.join("plugins").is_dir() {
+        return Ok(exe);
+    }
+    let data = window
+        .path()
+        .app_local_data_dir()
+        .map_err(|e| e.to_string())?;
+    fs::create_dir_all(&data).map_err(|e| format!("无法创建应用数据目录：{e}"))?;
+    Ok(data)
+}
+
 #[tauri::command]
 pub fn plugin_install(
     window: WebviewWindow,
@@ -188,13 +210,13 @@ pub fn plugin_install(
     css: String,
 ) -> Result<(), String> {
     super::require_control(&window)?;
-    write_plugin(&exe_directory()?, &id, &javascript, &css)
+    write_plugin(&storage_base(&window)?, &id, &javascript, &css)
 }
 
 #[tauri::command]
 pub fn plugin_uninstall(window: WebviewWindow, id: String) -> Result<(), String> {
     super::require_control(&window)?;
-    remove_plugin(&exe_directory()?, &id)
+    remove_plugin(&storage_base(&window)?, &id)
 }
 
 /// Saves an exported package to the user's Downloads folder and selects it in Explorer.
@@ -231,7 +253,7 @@ pub fn plugin_export_save(
 #[tauri::command]
 pub fn plugins_folder_open(window: WebviewWindow) -> Result<(), String> {
     super::require_control(&window)?;
-    let root = ensure_root(&exe_directory()?)?;
+    let root = ensure_root(&storage_base(&window)?)?;
     #[cfg(windows)]
     std::process::Command::new("explorer")
         .arg(&root)
@@ -245,15 +267,13 @@ pub fn plugins_folder_open(window: WebviewWindow) -> Result<(), String> {
 #[tauri::command]
 pub fn plugin_source(window: WebviewWindow, id: String) -> Result<PluginSource, String> {
     super::require_control(&window)?;
-    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
-    read_source(exe.parent().ok_or("无法找到 exe 目录")?, &id)
+    read_source(&storage_base(&window)?, &id)
 }
 
 #[tauri::command]
 pub fn plugin_catalog(window: WebviewWindow) -> Result<Vec<String>, String> {
     super::require_control(&window)?;
-    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
-    list_catalog(exe.parent().ok_or("无法找到 exe 目录")?)
+    list_catalog(&storage_base(&window)?)
 }
 
 #[cfg(test)]

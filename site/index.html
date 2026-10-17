@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lyrscape — 自由的桌面歌词</title>
+<meta name="description" content="Lyrscape：基于插件的 Windows 桌面歌词。逐字歌词、透明悬浮窗、可替换的渲染器与特效，接入 AMLL Player。">
+<link rel="icon" href="icon.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top"><div class="top-inner">
+  <a class="brand" href="./"><img src="icon.png" alt="">Lyrscape</a>
+  <nav class="links"><a href="./" aria-current="page">首页</a><a href="guide.html">使用指南</a><a href="plugins.html">插件</a><a href="https://github.com/Kevin-2106/Lyrscape">GitHub</a></nav>
+</div></header>
+<main>
+  <section class="hero">
+    <h1>Your lyrics.<br>Your landscape.</h1>
+    <p>Windows 桌面歌词。逐字歌词、透明置顶悬浮窗，渲染器与特效全部是插件：从干净的普通文字到 PV 风格的动态歌词，都可以替换、配置和自己编写。</p>
+    <div class="actions">
+      <a class="button primary" href="https://github.com/Kevin-2106/Lyrscape/releases/latest">下载最新版</a>
+      <a class="button" href="guide.html#install">安装说明</a>
+      <a class="button" href="plugins.html">浏览插件</a>
+    </div>
+    <p class="note">Windows 10 / 11（x64）。安装包无需管理员权限；未签名，首次运行时 SmartScreen 可能提示，选择「更多信息 → 仍要运行」。</p>
+  </section>
+
+  <div class="grid">
+    <div class="card"><h3>接入 AMLL Player</h3><p>本机 WebSocket 接收曲目、歌词与播放进度（默认 <code>ws://localhost:11444</code>），也能接收实时音频做节拍检测。</p></div>
+    <div class="card"><h3>透明桌面歌词</h3><p>置顶、鼠标穿透、拖动与调整宽度；高度随内容自动适配。全局快捷键随时显示 / 隐藏。</p></div>
+    <div class="card"><h3>渲染器即插件</h3><p>普通文字、Aurora、Apple Music 风格，以及多种 PV 风格的 canvas 渲染器；每个都有自己的构图、动效、颜色与字体选项。</p></div>
+    <div class="card"><h3>一个文件装插件</h3><p><code>.lyrx</code> 插件包带完整性校验，拖进窗口确认即可安装、热重载，不需要重启。</p></div>
+  </div>
+
+  <h2>三步开始</h2>
+  <ol class="doc">
+    <li>从 <a href="https://github.com/Kevin-2106/Lyrscape/releases/latest">Releases</a> 下载 <code>Lyrscape_x.y.z_x64-setup.exe</code> 并安装（<a href="guide.html#install">详细步骤</a>）。</li>
+    <li>在「歌词」页选择播放来源 AMLL 并启动服务，然后在 AMLL Player 的 WS Protocol 连接器里填入 <code>ws://localhost:11444</code>（<a href="guide.html#amll">连接说明</a>）。</li>
+    <li>到「渲染器」页挑一个样式，打开「桌面歌词」。想要更多样式，去 <a href="plugins.html">插件</a> 页下载 <code>.lyrx</code>。</li>
+  </ol>
+</main>
+<footer><div class="top-inner">Lyrscape · EARLY PREVIEW · <a href="https://github.com/Kevin-2106/Lyrscape/issues">反馈问题</a> · MIT License</div></footer>
+</body>
+</html>

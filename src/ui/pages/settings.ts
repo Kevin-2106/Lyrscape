@@ -47,11 +47,17 @@ export const settingsPage: PageDefinition = {
         <h2 id="settings-about">关于</h2>
         <div class="setting-card about-card">
           <div class="about-brand"><span class="brand-icon" aria-hidden="true">L</span><div><strong>Lyrscape</strong><p class="helper">让歌词成为风景 · All is plugin.</p></div></div>
-          <dl class="facts"><dt>版本</dt><dd>${ctx.appVersion} · EARLY PREVIEW</dd><dt>运行环境</dt><dd data-runtime></dd><dt>当前渲染器</dt><dd data-renderer></dd><dt>插件</dt><dd data-plugin-summary></dd></dl>
+          <dl class="facts"><dt>版本</dt><dd>${ctx.appVersion} · EARLY PREVIEW</dd><dt>运行环境</dt><dd data-runtime></dd><dt>当前渲染器</dt><dd data-renderer></dd><dt>插件</dt><dd data-plugin-summary></dd><dt>许可证</dt><dd>MIT</dd></dl>
+          <details class="notices" data-notices><summary>开源许可与第三方声明</summary><pre class="notices-text" data-notices-text>加载中…</pre></details>
         </div>
       </section>
     </div>`);
     root.append(page);
+    // The notices (~60 KB) load only when opened.
+    q(page, '[data-notices]').addEventListener('toggle', () => {
+      void import('../../../THIRD_PARTY_NOTICES.txt?raw').then(module => { q(page, '[data-notices-text]').textContent = module.default; })
+        .catch(() => { q(page, '[data-notices-text]').textContent = '无法加载第三方声明。'; });
+    }, { once: true });
     const drafts = new Map<ShortcutAction, string>();
     const controller = new AbortController();
     const { signal } = controller;

@@ -1,6 +1,6 @@
 import { PluginHost, type Plugin } from './kernel/host';
 import { Store } from './kernel/store';
-import type { AppState, PlaybackSnapshot, PluginManagement, Renderer, Timeline, GlobalShortcuts } from './sdk/types';
+import type { AppState, BeatDetector, PcmAudio, PlaybackSnapshot, PluginManagement, Renderer, Timeline, GlobalShortcuts } from './sdk/types';
 import { pcmAudioPlugin } from './plugins/audio';
 import { globalShortcutsPlugin } from './plugins/shortcuts';
 import { manualReloadPlugin, type ManualReload } from './plugins/reload';
@@ -21,6 +21,7 @@ import { catalog } from './plugins/catalog';
 import { AMLL_ADAPTER, createPluginManagement, normalizePreferences, rendererSelectionPlugin, type PluginReloader } from './plugins/management';
 import { sdkPlugin } from './plugins/sdk';
 import { infoOf, PluginRegistry, surfacesOf, type RegistryEntry } from './plugins/registry';
+import { debugJournal, watchErrors } from './plugins/debug';
 import './ui/app.css';
 
 const root = document.querySelector<HTMLElement>('#app')!;
@@ -93,6 +94,7 @@ async function boot() {
     return;
   }
 
+  watchErrors();
   const parserPlugin: Plugin = { id: 'official.parser.baseline', activate: ctx => ctx.provide('parser@1', { parse: parseLyrics }) };
   let demoSnapshot: PlaybackSnapshot = recovered?.snapshot?.demoSnapshot ?? (store.get().adapterId === 'demo' ? store.get() : { track: initial.track, lyrics: initial.lyrics, playback: initial.playback });
   const timeline = () => host.service<Timeline>('timeline@1');
@@ -109,6 +111,12 @@ async function boot() {
     mountPreview: el => host.service<Renderer>('renderer@1').mount(el, () => store.get(), host.service<Timeline>('timeline@1')),
     getState: () => store.get(), subscribe: fn => store.subscribe(fn),
     getPosition: () => timeline().position(store.get()),
+    debug: {
+      journal: debugJournal,
+      beat: () => host.hasService('audio.beat@1') ? host.service<BeatDetector>('audio.beat@1') : undefined,
+      pcm: () => host.hasService('audio.pcm@1') ? host.service<PcmAudio>('audio.pcm@1').read(1000) : undefined,
+      parse: (text, name) => host.service<{ parse: typeof parseLyrics }>('parser@1').parse(text, name),
+    },
     updateSettings: patch => store.update(s => {
       const settings = normalizeSettings({ ...s.settings, ...patch });
       try { localStorage.setItem('lyrscape.settings.v1', JSON.stringify(settings)); } catch { /* preview remains usable if storage unavailable */ }
@@ -211,7 +219,10 @@ async function boot() {
   if (management.canRescan('local')) {
     const wanted = (persistedPlugins as { rendererId?: unknown } | null)?.rendererId;
     await management.rescan('local').then(report => {
-      for (const failure of report.failed) console.warn(`插件 ${failure.id} 未能加载：${failure.error}`);
+      for (const failure of report.failed) {
+        console.warn(`插件 ${failure.id} 未能加载：${failure.error}`);
+        debugJournal.record('events', 'plugin', `插件 ${failure.id} 未能加载：${failure.error}`, failure);
+      }
       if (typeof wanted === 'string' && report.added.includes(wanted) && store.get().plugins.enabled[wanted] !== false) management.selectRenderer(wanted);
     }).catch(error => console.warn('已安装插件未能加载', error));
   }

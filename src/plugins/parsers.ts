@@ -114,6 +114,9 @@ function parseLrc(text: string, source: string): LyricDocument {
   const drafts = new Map<LyricLine, WordDraft[]>();
   let index = 0;
   let wordCount = 0;
+  // Bilingual LRC convention: a line repeating the previous line's timestamps is
+  // its translation (a third one its romanization), not another sung line.
+  let previous: { stamps: number[]; lines: LyricLine[] } | undefined;
   for (const raw of rawLines) {
     if (/^\s*\[[a-z][a-z0-9_-]*:.*\]\s*$/i.test(raw)) continue;
     const stamps: number[] = [];
@@ -128,6 +131,13 @@ function parseLrc(text: string, source: string): LyricDocument {
     if (!stamps.length) continue;
     checkedText(content, 'LRC line');
     const markers = [...content.matchAll(/<(\d+(?::\d+){1,2}(?:[.:]\d{1,3})?)>/g)];
+    const annotation = content.trim();
+    if (previous && !markers.length && annotation && previous.stamps.length === stamps.length && previous.stamps.every((stamp, i) => stamp === stamps[i])
+      && previous.lines.every(line => line.text.trim() && line.romanization === undefined)) {
+      const key = previous.lines[0].translation === undefined ? 'translation' : 'romanization';
+      for (const line of previous.lines) line[key] = annotation;
+      continue;
+    }
     wordCount += markers.length * stamps.length;
     if (wordCount > MAX_WORDS) fail('Too many lyric word markers (maximum 100,000).');
     const originalDraft: WordDraft[] = [];
@@ -146,9 +156,11 @@ function parseLrc(text: string, source: string): LyricDocument {
       // Untimed non-whitespace text before the first marker has no word timing.
       if (prefix.trim()) originalDraft.length = 0;
     }
+    previous = { stamps, lines: [] };
     for (const stamp of stamps) {
       const shift = stamp - stamps[0] + offset;
       const line: LyricLine = { id: `lrc-${index++}`, text: displayText, startMs: Math.max(0, stamp + offset) };
+      previous.lines.push(line);
       if (originalDraft.length) {
         const draft = originalDraft.map((word) => ({
           text: word.text,
