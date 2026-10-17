@@ -12,12 +12,6 @@ export const pvProfiles = [
     description: '极粗白色黑体配深红硬投影：待唱的字先以红色描边等待，唱到时实心弹入，行尾从第一个字开始擦除；短句把巨大汉字甩到两端。' },
   { id: 'official.renderer.pv-synth', service: 'renderer.pv-synth@1', style: 'synth', name: 'PV · 合成谱',
     description: '乐理 HUD：代码式段落标题、到下一句的倒计时、打字机光标显现歌词；底部音名随实时音频点亮，两侧频谱与示波器，彩色碎片漂过。' },
-  { id: 'official.renderer.pv-halo', service: 'renderer.pv-halo@1', style: 'halo', name: 'PV · 晴空终端',
-    description: '天蓝与白的界面风：主歌在白色「Lyrics」小窗口里以极粗黑体逐词打出，左右交替弹开；副歌巨大白字带蓝边，从像素马赛克解码出现，退场碎回方块；青柠光环图标与引号标题 HUD。' },
-  { id: 'official.renderer.pv-halo2', service: 'renderer.pv-halo2@1', style: 'halo2', name: 'PV · 晴空终端 II',
-    description: '晴空终端的硬切版：所有动效按 30fps 整帧跳变。主歌窗口两帧切开，新打出的词组以一种饱和色（紫 / 红 / 蓝 / 品红轮换）闪一下再变黑，词组首字带深色选区块；副歌每行以白色面板闪切进场，每个字先切出细描边框，部分字先跳出白色小窗，字以像素块甩入后放大落定，细框淡淡留在字后。' },
-  { id: 'official.renderer.pv-halo3', service: 'renderer.pv-halo3@1', style: 'halo3', name: 'PV · 晴空终端 III',
-    description: '按原 PV 副歌逐帧重做：巨大白色像素圆角字分行错落铺满画面，青色像素残影与雪花 / 十字小饰件；每个字先由白色光环方块占位跳动，再一帧切入；背后斜向白色横纹缓缓左移、细圆环与彩色光点飘动，节拍处整屏白闪，退场以网点擦除。主歌白色「Lyrics」窗口与底部白色字幕条交替。' },
   { id: 'official.renderer.pv-azure', service: 'renderer.pv-azure@1', style: 'azure', name: 'PV · 一起出发',
     description: '蓝色青春 MV 风：主歌圆体白字在天蓝竖条里逐字浮现，大号青色残影收拢落位，四角星沿发丝线滑过；副歌白色明朝体大字带蓝色投影逐字盖章，末字用青色描线写出，彩纸飘落、斜向跑马灯与取景框；短句换成圆粗体白字，从倾斜的青色色带上甩入。' },
   { id: 'official.renderer.pv-gamedev', service: 'renderer.pv-gamedev@1', style: 'gamedev', name: 'PV · 游戏开发部',
@@ -55,7 +49,6 @@ const effect = (key: string, label: string, description?: string, value = true):
 const glitch = (value: number, description: string): ConfigField =>
   ({ key: 'glitch', group: '特效', label: '故障强度', description, type: 'number', default: value, min: 0, max: 1.5, step: 0.1 });
 const dynamics = [motion, intensity, speed, beat];
-const haloColors = [color('sky', '天蓝', '#38b4ee', '偏移边、窗口底块与预备框'), color('deep', '深蓝', '#1767d6'), color('lime', '光环图标', '#d6f53a')];
 
 export function pvFields(profile: PvProfile): ConfigField[] {
   switch (profile.style) {
@@ -74,33 +67,6 @@ export function pvFields(profile: PvProfile): ConfigField[] {
       color('ink', '文字', '#f3f0ff'), color('glow', '光晕', '#9680ff'),
       effect('hud', '标题与计时', '段落标题、下一句倒计时、剩余时间与 BPM。'), effect('notes', '音名行', '随实时音频点亮正在发声的音名；没有音频时保持暗淡。'),
       effect('scopes', '频谱与示波器'), effect('shards', '彩色碎片')];
-    case 'halo': case 'halo2': return [layout, scale, ...dynamics, font, ...haloColors,
-      ...(profile.style === 'halo2' ? [
-        effect('chroma', '打字变色', '主歌新打出的词组以一种饱和色闪 3 帧再变黑，每组只闪一次。'),
-        effect('slots', '副歌预备框', '副歌每个字出现前的细描边框，部分字先跳出白色小窗。'),
-        effect('burst', '副歌白块闪入', '副歌每行开头约 0.1 秒的白色面板闪切。'),
-      ] : []),
-      glitch(0.7, '副歌字形的切片残痕与抖动；0 只保留像素解码进场。'),
-      effect('accent', '青柠光环图标'), effect('hud', '标题与时间码', '右上角引号标题与右下角时间码。')];
-    case 'halo3': return [layout, scale,
-      { key: 'verse', group: '构图', label: '主歌样式', description: '原 PV 前段用「Lyrics」窗口，后段用底部白色字幕条。', type: 'select', default: 'mix', options: [
-        { value: 'mix', label: '交替（每 4 行切换）' }, { value: 'window', label: 'Lyrics 窗口' }, { value: 'strip', label: '白色字幕条' },
-      ] },
-      ...dynamics, { ...font, default: 'auto' },
-      { key: 'glyph', group: '字体', label: '副歌字形', description: '像素圆角字还原原 PV；黑体保留 I / II 的极粗字。', type: 'select', default: 'pixel', options: [
-        { value: 'pixel', label: '像素圆角（原 PV）' }, { value: 'mixed', label: '像素与黑体混排' }, { value: 'gothic', label: '极粗黑体' },
-      ] },
-      ...haloColors, color('echo', '像素残影', '#3fd2ff'),
-      effect('slots', '副歌辅助框', '每个字出现前先切出细白描边框（左上天蓝短条），落字后淡为 30% 留在字后。'),
-      effect('placeholder', '方块占位', '部分字出现前，白色圆角方块先跳到字位上。'),
-      effect('ornaments', '雪花与十字饰件'),
-      effect('streaks', '斜向白色横纹'),
-      effect('particles', '彩色光点与细圆环'),
-      effect('flash', '节拍白闪', '每行开头与重拍时整屏短暂泛白；有实时音频时跟随鼓点。'),
-      { key: 'exitFx', group: '特效', label: '副歌退场', type: 'select', default: 'dots', options: [
-        { value: 'dots', label: '网点擦除' }, { value: 'stripes', label: '竖条擦除' }, { value: 'shatter', label: '碎回方块' },
-      ] },
-      effect('accent', '青柠光环图标', '左上角或行尾的青柠色小图标。', false), effect('hud', '标题与时间码', '右上角引号标题、左侧细字说明与右下角时间码。')];
     case 'azure': return [layout, scale,
       { key: 'direction', group: '构图', label: '主歌排版', description: '竖排还原 MV 的竖条字幕，舞台会变高；横排适合普通桌面歌词条。', type: 'select', default: 'horizontal', options: [
         { value: 'horizontal', label: '横排' }, { value: 'vertical', label: '竖排（还原 MV）' },

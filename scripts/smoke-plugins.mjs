@@ -28,9 +28,9 @@ try {
   await go(page, 'lyrics');
   await expect(page.locator('[data-renderer-label]')).toHaveText('普通文字');
   await go(page, 'plugins');
-  await expect(page.locator('.plugin-count')).toHaveText('27 / 27 已启用');
+  await expect(page.locator('.plugin-count')).toHaveText('24 / 24 已启用');
   await page.locator('[data-plugin-group="look"]').click();
-  await expect(page.locator('.plugin-row:visible')).toHaveCount(13);
+  await expect(page.locator('.plugin-row:visible')).toHaveCount(10);
   await page.locator('[data-plugin-search]').fill('aurora');
   await expect(page.locator('.plugin-row:visible')).toHaveCount(1);
   await page.locator('[data-plugin-search]').fill('does-not-exist');

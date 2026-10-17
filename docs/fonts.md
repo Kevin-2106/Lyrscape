@@ -22,7 +22,7 @@
 | heavy（吸血鬼） | Dela Gothic One | 站酷庆科黄油体 | Noto Sans TC Black |
 | code（合成谱） | M PLUS 1 Code | Noto Sans SC | Noto Sans TC |
 | rounded（一起出发） | M PLUS Rounded 1c 500 / 800 / 900 | Noto Sans SC | Noto Sans TC |
-| pixel（晴空终端 III、游戏开发部） | Fusion Pixel 12px Proportional JP | Fusion Pixel 12px Proportional SC | Fusion Pixel 12px Proportional TC |
+| pixel（游戏开发部） | Fusion Pixel 12px Proportional JP | Fusion Pixel 12px Proportional SC | Fusion Pixel 12px Proportional TC |
 
 - arcade（游戏开发部 HUD）：Press Start 2P，只画拉丁文字，非拉丁文字改用 pixel。
 - PV 的「字体」选项把中日文角色整体替换为上表中的另一种角色；拉丁专用角色（mono / script / serif / arcade）不受影响。
