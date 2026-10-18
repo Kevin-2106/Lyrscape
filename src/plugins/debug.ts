@@ -4,7 +4,7 @@
  * uncaught errors), shown on the 调试 page. Always on, also in release builds;
  * bounded per channel so a long session cannot grow it.
  */
-export type DebugChannel = 'amll' | 'events';
+export type DebugChannel = 'amll' | 'smtc' | 'events';
 export interface DebugEntry {
   id: number;
   channel: DebugChannel;
@@ -18,10 +18,10 @@ export interface DebugEntry {
   truncated?: boolean;
 }
 
-const LIMIT: Record<DebugChannel, number> = { amll: 400, events: 200 };
+const LIMIT: Record<DebugChannel, number> = { amll: 400, smtc: 300, events: 200 };
 const MAX_DETAIL = 256 * 1024;
 
-const entries: Record<DebugChannel, DebugEntry[]> = { amll: [], events: [] };
+const entries: Record<DebugChannel, DebugEntry[]> = { amll: [], smtc: [], events: [] };
 const listeners = new Set<(entry: DebugEntry) => void>();
 let next = 1, paused = false;
 
@@ -32,7 +32,7 @@ const stringify = (value: unknown): string => {
 
 export const debugJournal = {
   record(channel: DebugChannel, kind: string, summary: string, detail?: unknown) {
-    if (paused && channel === 'amll') return;
+    if (paused && channel !== 'events') return;
     let text = detail === undefined ? undefined : stringify(detail), truncated = false;
     if (text && text.length > MAX_DETAIL) { text = text.slice(0, MAX_DETAIL); truncated = true; }
     const entry: DebugEntry = { id: next++, channel, at: Date.now(), kind, summary, detail: text, ...(truncated ? { truncated } : {}) };
@@ -45,7 +45,7 @@ export const debugJournal = {
   clear(channel: DebugChannel) { entries[channel].length = 0; },
   subscribe(listener: (entry: DebugEntry) => void) { listeners.add(listener); return () => { listeners.delete(listener); }; },
   get paused() { return paused; },
-  /** Pausing stops recording AMLL traffic (the list keeps what it has); events are always kept. */
+  /** Pausing stops recording AMLL and SMTC traffic (the lists keep what they have); events are always kept. */
   setPaused(value: boolean) { paused = value; },
 };
 export type DebugJournal = typeof debugJournal;

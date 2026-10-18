@@ -4,8 +4,9 @@ import type { AppState, PluginManifest } from '../sdk/types';
 import { amllPlugin } from './amll';
 import { auroraPlugin } from './aurora';
 import { beatPlugin } from './beat';
-import { AMLL_ADAPTER, AURORA_RENDERER, BEAT_DETECTOR, builtinManifests } from './manifests';
+import { AMLL_ADAPTER, AURORA_RENDERER, BEAT_DETECTOR, SMTC_ADAPTER, builtinManifests } from './manifests';
 import { pvPlugins } from './pv';
+import { smtcPlugin } from './smtc';
 
 /** A built-in optional plugin: its manifest plus a factory for the window's store. */
 export interface CatalogItem { manifest: PluginManifest; create(store: Store<AppState>): Plugin }
@@ -13,6 +14,7 @@ export interface CatalogItem { manifest: PluginManifest; create(store: Store<App
 const factories: Record<string, (store: Store<AppState>) => Plugin> = {
   [BEAT_DETECTOR]: store => beatPlugin(store),
   [AMLL_ADAPTER]: store => amllPlugin(store),
+  [SMTC_ADAPTER]: store => smtcPlugin(store),
   [AURORA_RENDERER]: () => auroraPlugin,
   ...Object.fromEntries(pvPlugins.map(plugin => [plugin.id, () => plugin])),
 };

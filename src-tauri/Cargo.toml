@@ -26,6 +26,7 @@ tauri-plugin-global-shortcut = "2.4.1"
 [target.'cfg(windows)'.dependencies]
 webview2-com = "0.39.1"
 windows-core = "0.62"
+windows = { version = "0.62", features = ["Foundation", "Foundation_Collections", "Media_Control", "Web_Http", "Web_Http_Headers", "Win32_System_Com"] }
 
 [features]
 custom-protocol = ["tauri/custom-protocol"]

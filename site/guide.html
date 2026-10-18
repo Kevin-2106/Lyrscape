@@ -18,6 +18,7 @@
     <li><a href="#install">下载与安装</a></li>
     <li><a href="#update">更新与卸载</a></li>
     <li><a href="#amll">连接 AMLL Player</a></li>
+    <li><a href="#smtc">系统媒体（SMTC）与在线歌词</a></li>
     <li><a href="#overlay">桌面歌词</a></li>
     <li><a href="#plugins">安装插件</a></li>
     <li><a href="#folder">插件文件放在哪里</a></li>
@@ -52,7 +53,18 @@
   </ol>
   <p>连不上时，先看「调试 › AMLL 原始数据」里有没有「connected」和 <code>setMusic</code> / <code>setLyric</code> 消息（见 <a href="#debug">调试</a>）。端口被占用时换一个端口，并在播放器里同步修改。</p>
 
-  <h2 id="overlay">4. 桌面歌词</h2>
+  <h2 id="smtc">4. 系统媒体（SMTC）与在线歌词</h2>
+  <p>不用 AMLL 时，Lyrscape 也可以读取 Windows 的「系统媒体控制」——就是按音量键时弹出的媒体卡片里显示的曲目。Spotify、QQ 音乐、浏览器里的网页播放器等大多支持。</p>
+  <ol>
+    <li>在「歌词」页的「播放来源」中选择 <strong>系统媒体</strong>，然后照常在播放器里放歌。</li>
+    <li>Lyrscape 读到曲名、歌手和进度后，会自动从 <a href="https://lrclib.net">LRCLIB</a> 和网易云音乐搜索歌词，优先使用带时间的歌词；网易云有翻译时一并显示为译文。</li>
+    <li>找错了就在下方候选列表里点另一首，这个选择会被记住；「重新搜索」会忽略之前的结果。</li>
+    <li>同时开着几个播放器时，在「媒体会话」里指定要读取的应用。</li>
+  </ol>
+  <div class="callout">搜索时会把曲名、歌手、专辑和时长发送给 LRCLIB / 网易云音乐。只有选择「系统媒体」作为播放来源时才会联网；在「全部插件 › 系统媒体（SMTC）」中可以只用其中一家、关闭网易云译文或调整歌词偏移（歌词早了调大，晚了调小）。</div>
+  <p>部分应用（尤其是浏览器页面）不报告播放进度，这时歌词无法跟随时间。搜索与匹配的过程可以在「调试 › SMTC 与在线歌词」中查看。</p>
+
+  <h2 id="overlay">5. 桌面歌词</h2>
   <ul>
     <li>右上角「桌面歌词」开关显示透明歌词窗口；「设置」页可以开关置顶、鼠标穿透和调整边框。</li>
     <li>关闭鼠标穿透后，拖动歌词中间移动窗口，拖动左右边缘调整宽度；高度自动适配。</li>
@@ -60,7 +72,7 @@
     <li>关闭主窗口会最小化到托盘，桌面歌词继续显示；从托盘图标退出。</li>
   </ul>
 
-  <h2 id="plugins">5. 安装插件</h2>
+  <h2 id="plugins">6. 安装插件</h2>
   <ol>
     <li>在 <a href="plugins.html">插件</a> 页下载 <code>.lyrx</code> 文件。</li>
     <li>Lyrscape →「插件 › 全部插件」→「导入插件」选择文件，或者直接把文件拖进窗口。</li>
@@ -74,7 +86,7 @@
   </ul>
   <div class="callout">插件与应用同权限运行，没有沙箱，可以读取歌词、播放状态和设置。只安装你信任的来源提供的插件。</div>
 
-  <h2 id="folder">6. 插件文件放在哪里</h2>
+  <h2 id="folder">7. 插件文件放在哪里</h2>
   <table>
     <tr><th>情况</th><th>位置</th></tr>
     <tr><td>安装版</td><td><code>%LOCALAPPDATA%\io.github.kevin2106.lyrscape\plugins\</code></td></tr>
@@ -82,12 +94,13 @@
   </table>
   <p>「全部插件」页的「打开插件文件夹」按钮直接打开它。每个插件是 <code>&lt;插件 ID&gt;.mjs</code> 和可选的同名 <code>.css</code>；直接编辑后在插件详情里选「本地插件文件 → 热重载」即可生效。</p>
 
-  <h2 id="debug">7. 调试与反馈问题</h2>
+  <h2 id="debug">8. 调试与反馈问题</h2>
   <p>左侧「应用 › 调试」页在正式版中也可用：</p>
   <table>
     <tr><th>页签</th><th>能看到什么</th></tr>
     <tr><td>播放</td><td>播放来源、AMLL 服务状态、曲目、播放器最后报告的位置与「采样年龄」、时间轴计算出的位置、当前行。</td></tr>
     <tr><td>AMLL 原始数据</td><td>播放器发来的每条消息（解码后的 JSON）、连接 / 断开事件和处理失败的原因。可隐藏高频的 <code>progress</code>、暂停记录、复制全部。</td></tr>
+    <tr><td>SMTC 与在线歌词</td><td>系统媒体会话的变化、每次歌词搜索的查询、候选与匹配度、命中 / 缓存 / 手动选择和失败原因。</td></tr>
     <tr><td>歌词解析</td><td>当前歌词被解析成了什么：时间模式、行数、逐字片段、识别的语言，以及每一行的逐字时间。可以粘贴歌词「试解析」而不替换当前歌词。</td></tr>
     <tr><td>节拍与音频</td><td>节拍检测的 BPM、置信度、相位与脉冲曲线，频带 / 音级 / 波形，以及最近一帧 PCM 的来源、序号、丢帧与峰值。</td></tr>
     <tr><td>插件</td><td>每个插件的状态、来源、提供的服务与错误。</td></tr>
@@ -95,10 +108,10 @@
   </table>
   <p>报告问题时，点右上角「复制诊断信息」，粘贴到 <a href="https://github.com/Kevin-2106/Lyrscape/issues">Issues</a>。诊断信息包含版本、播放状态、歌词统计、插件状态和最近的 AMLL 消息（不含高频进度），不包含歌词正文的整份文档；如果最近的 <code>setLyric</code> 消息里有你不想公开的歌词，请先删掉。</p>
 
-  <h2 id="develop">8. 编写插件</h2>
+  <h2 id="develop">9. 编写插件</h2>
   <p>插件是一个导出 <code>manifest</code> 和 <code>Plugin</code> 对象的 ES 模块，用 <code>npm run plugin:pack</code> 打包成 <code>.lyrx</code>。完整说明见仓库中的 <a href="https://github.com/Kevin-2106/Lyrscape/blob/main/docs/plugin-authoring.md">插件编写手册</a>，示例见 <code>examples/plugins/wave/</code>。想让插件出现在本站的插件页，提交 PR 把入口文件加到 <code>site/gallery.json</code>。</p>
 
-  <h2 id="faq">9. 常见问题</h2>
+  <h2 id="faq">10. 常见问题</h2>
   <h3>导入插件提示「完整性校验失败」</h3>
   <p>文件在下载或编辑后被改动了。重新下载；自己修改过的插件请用 <code>npm run plugin:pack</code> 重新打包。</p>
   <h3>插件无法安装 / 提示无法创建 plugins 目录</h3>

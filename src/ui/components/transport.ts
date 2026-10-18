@@ -48,8 +48,8 @@ export function mountTransport(host: HTMLElement, { ctx, perform }: UiServices):
     const { track, playback } = state, local = state.adapterId === 'demo';
     q(bar, '[data-track-title]').textContent = track.title || '等待歌曲';
     q(bar, '[data-track-artists]').textContent = (Array.isArray(track.artists) ? track.artists.join(' / ') : String(track.artists ?? '')) || 'Lyrscape 本地演示';
-    q(bar, '[data-source-label]').textContent = local ? 'DEMO' : 'AMLL';
-    q(bar, '[data-transport-hint]').textContent = local ? '本地演示播放' : '由 AMLL 控制播放';
+    q(bar, '[data-source-label]').textContent = local ? 'DEMO' : state.adapterId === 'smtc' ? 'SMTC' : 'AMLL';
+    q(bar, '[data-transport-hint]').textContent = local ? '本地演示播放' : state.adapterId === 'smtc' ? `由系统媒体控制播放${state.media?.source ? ` · ${state.media.source}` : ''}` : '由 AMLL 控制播放';
     if (lastPlaying !== playback.playing) {
       lastPlaying = playback.playing;
       q(bar, '[data-play-icon]').innerHTML = playback.playing ? icons.pause : icons.play;

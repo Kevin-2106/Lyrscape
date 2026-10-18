@@ -1,4 +1,4 @@
-import type { AppState, BeatDetector, LyricDocument, PcmFrame, PluginManagement, GlobalShortcuts } from '../sdk/types';
+import type { AdapterId, AppState, BeatDetector, LyricDocument, PcmFrame, PluginManagement, GlobalShortcuts } from '../sdk/types';
 import type { DebugJournal } from '../plugins/debug';
 import type { ConfirmOptions } from './kit/dialog';
 
@@ -25,13 +25,20 @@ export interface UiContext {
   mountPreview(root: HTMLElement): () => void;
   updateSettings(settings: Partial<AppState['settings']>): MaybeAsync;
   resetSettings(): MaybeAsync;
-  selectAdapter(id: 'demo' | 'amll'): MaybeAsync;
+  selectAdapter(id: AdapterId): MaybeAsync;
   setPlaying(playing: boolean): MaybeAsync;
   seek(positionMs: number): MaybeAsync;
   importLyrics(text: string, name?: string): MaybeAsync;
   overlay(action: 'show' | 'hide' | 'clickthrough' | 'alwaysOnTop' | 'borderVisible', value?: boolean): MaybeAsync;
   startAmll(port: number): MaybeAsync;
   stopAmll(): MaybeAsync;
+  /** System media (SMTC) source: session choice and online lyric search. */
+  smtc?: {
+    /** undefined follows Windows' current session. */
+    selectSession(source?: string): MaybeAsync;
+    research(): MaybeAsync;
+    choose(key: string): MaybeAsync;
+  };
   resetEverything(): void;
 }
 

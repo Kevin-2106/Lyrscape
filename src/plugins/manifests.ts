@@ -8,6 +8,7 @@ export const TEXT_RENDERER = 'official.renderer.text';
 export const AURORA_RENDERER = 'official.renderer.aurora';
 export const AMLL_ADAPTER = 'official.adapter.amll';
 export const BEAT_DETECTOR = 'official.audio.beat';
+export const SMTC_ADAPTER = 'official.adapter.smtc';
 
 export const auroraFields: ConfigField[] = [
   { key: 'entrance', label: '进入动画', type: 'select', default: 'comet', options: [
@@ -27,6 +28,14 @@ export const beatFields: ConfigField[] = [
 export const amllFields: ConfigField[] = [
   { key: 'port', label: '监听端口', description: '下次启动服务时使用；修改不会断开当前连接。', type: 'number', default: 11444, min: 1024, max: 65535, step: 1 },
 ];
+export const smtcFields: ConfigField[] = [
+  { key: 'providers', label: '歌词来源', description: '曲名、歌手、专辑和时长会发送给所选的歌词服务用于搜索。', type: 'select', default: 'lrclib,netease', options: [
+    { value: 'lrclib,netease', label: 'LRCLIB 优先，网易云音乐补充' }, { value: 'netease,lrclib', label: '网易云音乐优先，LRCLIB 补充' },
+    { value: 'lrclib', label: '仅 LRCLIB' }, { value: 'netease', label: '仅网易云音乐' },
+  ] },
+  { key: 'translation', label: '网易云译文', description: '网易云音乐有翻译时作为译文行显示。', type: 'boolean', default: true },
+  { key: 'offset', label: '歌词偏移（毫秒）', description: '歌词比歌声早就调大，晚就调小。', type: 'number', default: 0, min: -5000, max: 5000, step: 50 },
+];
 
 /**
  * The optional, hot-reloadable plugins. Adding a manifest here (plus a factory in
@@ -35,6 +44,7 @@ export const amllFields: ConfigField[] = [
 export const builtinManifests: PluginManifest[] = [
   { id: BEAT_DETECTOR, name: '节拍检测', description: '从 PCM 实时估计速度与鼓点相位，供渲染器跟随节拍；没有音频时不产生效果。', category: 'effect', fields: beatFields },
   { id: AMLL_ADAPTER, name: 'AMLL 连接', description: '只读接收 AMLL V1 / V2 曲目、歌词与进度，独立于渲染器。', category: 'playback-adapter', fields: amllFields, surfaces: ['control'] },
+  { id: SMTC_ADAPTER, name: '系统媒体（SMTC）', description: '读取 Windows 系统媒体控制中的曲目与进度（Spotify、浏览器、各类播放器），并在线搜索歌词。仅 Windows 桌面版。', category: 'playback-adapter', fields: smtcFields, surfaces: ['control'] },
   { id: AURORA_RENDERER, name: 'Aurora · 流光', description: '彗星飞入、旋转落位、棱镜展开，配合文字光晕与星芒。', category: 'renderer', rendererService: 'renderer.aurora@1', fields: auroraFields },
   ...pvProfiles.map((profile): PluginManifest => ({ id: profile.id, name: profile.name, description: profile.description,
     category: 'renderer', rendererService: profile.service, fields: pvFields(profile), theme: pvTheme(profile) })),

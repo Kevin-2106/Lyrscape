@@ -32,6 +32,6 @@ Tauri Windows 宿主 + mock adapter + 默认 timeline + LRC parser + 基础 rend
 
 ## M4：更多接入与分发
 
-SMTC adapter、歌词来源插件、用户预设、签名/更新/依赖回滚、可选插件目录。Windows 验收稳定后再评估其他平台的 overlay 与原生播放接入。
+歌词来源插件（SMTC adapter 与 LRCLIB / 网易云在线歌词已于 2026-10-18 实现）、用户预设、签名/更新/依赖回滚、可选插件目录。Windows 验收稳定后再评估其他平台的 overlay 与原生播放接入。
 
 不提前承诺插件商店、所有播放器支持或跨平台 overlay 一致性。所有阶段都要区分“契约已写”“模拟验证通过”“真实播放器通过”和“原生桌面通过”。

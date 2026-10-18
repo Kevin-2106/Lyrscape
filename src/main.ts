@@ -17,8 +17,9 @@ import pkg from '../package.json';
 import { desktop, native, onEvent, sendOverlayEvent } from './platform';
 import { restoreSession, type SessionSnapshot } from './session';
 import { amllPlugin } from './plugins/amll';
+import { smtcPlugin, type SmtcAdapter } from './plugins/smtc';
 import { catalog } from './plugins/catalog';
-import { AMLL_ADAPTER, createPluginManagement, normalizePreferences, rendererSelectionPlugin, type PluginReloader } from './plugins/management';
+import { AMLL_ADAPTER, SMTC_ADAPTER, createPluginManagement, normalizePreferences, rendererSelectionPlugin, type PluginReloader } from './plugins/management';
 import { sdkPlugin } from './plugins/sdk';
 import { infoOf, PluginRegistry, surfacesOf, type RegistryEntry } from './plugins/registry';
 import { debugJournal, watchErrors } from './plugins/debug';
@@ -62,7 +63,7 @@ async function boot() {
   if (isOverlay) {
     const plugins = builtin('overlay');
     for (const entry of plugins) registry.set(entry);
-    await host.start([pcmAudioPlugin, sdkPlugin, manualReloadPlugin(host, store, true, registry), themePlugin, timelinePlugin, rendererPlugin, ...plugins.map(entry => entry.plugin), ...(desktop ? [amllPlugin(store, true)] : []), rendererSelectionPlugin(host, registry), overlaySurfacePlugin(root, store, true)]);
+    await host.start([pcmAudioPlugin, sdkPlugin, manualReloadPlugin(host, store, true, registry), themePlugin, timelinePlugin, rendererPlugin, ...plugins.map(entry => entry.plugin), ...(desktop ? [amllPlugin(store, true), smtcPlugin(store, true)] : []), rendererSelectionPlugin(host, registry), overlaySurfacePlugin(root, store, true)]);
     await host.service<ManualReload>('plugins.reload@1').ready();
     if (desktop) {
       let controlActive = recovered?.controlActive ?? true;
@@ -128,14 +129,17 @@ async function boot() {
     },
     selectAdapter: id => {
       if (id === 'amll' && !host.hasService('adapter.amll@1')) throw new Error('请先在插件管理中启用 AMLL 连接。');
+      if (id === 'smtc' && !desktop) throw new Error('系统媒体（SMTC）需要 Windows 桌面版。');
+      if (id === 'smtc' && !host.hasService('adapter.smtc@1')) throw new Error('请先在插件管理中启用「系统媒体（SMTC）」。');
       const current = store.get();
       if (current.adapterId === id) return;
       if (current.adapterId === 'demo') demoSnapshot = {
         track: current.track, lyrics: current.lyrics,
         playback: { ...current.playback, positionMs: timeline().position(current), playing: false, observedAtMonoMs: performance.now() },
       };
-      const snapshot = id === 'demo' ? { ...demoSnapshot, playback: { ...demoSnapshot.playback, observedAtMonoMs: performance.now() } } : host.service<AmllAdapter>('adapter.amll@1').snapshot();
-      store.update(s => ({ ...s, ...snapshot, adapterId: id, error: undefined }));
+      const snapshot = id === 'demo' ? { ...demoSnapshot, playback: { ...demoSnapshot.playback, observedAtMonoMs: performance.now() } }
+        : id === 'smtc' ? host.service<SmtcAdapter>('adapter.smtc@1').snapshot() : host.service<AmllAdapter>('adapter.amll@1').snapshot();
+      store.update(s => ({ ...s, media: undefined, ...snapshot, adapterId: id, error: undefined }));
     },
     setPlaying: playing => {
       if (store.get().adapterId !== 'demo') return;
@@ -153,6 +157,11 @@ async function boot() {
     }),
     startAmll: port => guarded(async () => { api.selectAdapter('amll'); await host.service<AmllAdapter>('adapter.amll@1').start(port); }),
     stopAmll: () => guarded(() => host.service<AmllAdapter>('adapter.amll@1').stop()),
+    smtc: {
+      selectSession: source => guarded(() => host.service<SmtcAdapter>('adapter.smtc@1').selectSession(source)),
+      research: () => guarded(() => host.service<SmtcAdapter>('adapter.smtc@1').research()),
+      choose: key => guarded(() => host.service<SmtcAdapter>('adapter.smtc@1').choose(key)),
+    },
     overlay: (action, value) => guarded(async () => {
       const previous = store.get().overlay;
       const next: Partial<AppState['overlay']> = {};
@@ -180,6 +189,7 @@ async function boot() {
     entry(globalShortcutsPlugin(store), { name: '全局快捷键', description: '显示桌面歌词、切换穿透和调整边框；注册冲突警告。', category: 'settings', essential: true }),
     entry(demoPlugin, { name: '本地演示', description: '原创演示与本地歌词播放，不需要外部播放器。', category: 'playback-adapter', essential: true }),
     ...take(AMLL_ADAPTER),
+    ...take(SMTC_ADAPTER),
     entry(parserPlugin, { name: '基础歌词解析', description: 'LRC、增强 LRC、常用 TTML 与纯文本。', category: 'lyric-parser', essential: true }),
     entry(sdkPlugin, { name: '插件 SDK', description: '向动态加载的插件提供 DOM 渲染器构造、时间轴工具与 API 版本（sdk@1）。', category: 'settings', essential: true }),
     entry(timelinePlugin, { name: '共享时间轴', description: '采样插值、暂停与过期保护，所有视图共享时间基准。', category: 'timeline-provider', essential: true }),
@@ -199,6 +209,7 @@ async function boot() {
       if (store.get().adapterId === 'amll') api.selectAdapter('demo');
       await host.service<AmllAdapter>('adapter.amll@1').stop();
     }
+    if (id === SMTC_ADAPTER && store.get().adapterId === 'smtc') api.selectAdapter('demo');
   }, (() => {
     const reloader = () => host.service<ManualReload>('plugins.reload@1');
     return {

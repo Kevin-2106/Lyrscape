@@ -8,6 +8,9 @@ import { infoOf, PLUGIN_ID, surfacesOf, validateManifest, type PluginRegistry } 
 import { pluginStorage } from './storage';
 import { prepareLegacyPluginFonts } from './font-assets';
 
+/** Adapters the overlay runs as its own background instance; their code is not synced to it. */
+const BACKGROUND_ADAPTERS = new Set(['official.adapter.amll', 'official.adapter.smtc']);
+
 /** `added` marks plugins a rescan registered; `removed` tells a late overlay to drop one. */
 type Bundle = { id: string; javascript?: string; css?: string; builtin?: boolean; added?: boolean; removed?: boolean };
 type Phase = 'prepare' | 'commit' | 'rollback' | 'finish' | 'remove';
@@ -155,7 +158,7 @@ export function manualReloadPlugin(host: PluginHost, store: Store<AppState>, ove
         queue = queue.then(async () => {
           for (const bundle of bundles) {
             if (bundle.removed) { unregister(bundle.id); continue; }
-            if (bundle.id === 'official.adapter.amll') continue;
+            if (BACKGROUND_ADAPTERS.has(bundle.id)) continue;
             const known = committed.get(bundle.id);
             if (known && known.javascript === bundle.javascript && known.css === bundle.css && host.definition(bundle.id)) continue;
             if (!host.definition(bundle.id)) {
@@ -170,7 +173,7 @@ export function manualReloadPlugin(host: PluginHost, store: Store<AppState>, ove
       }));
     } else {
       ctx.own(await onEvent('plugin-reload-sync-request', () => {
-        if (active && ready) void sendEvent('plugin-reload-sync', [...committed.values()].filter(b => b.id !== 'official.adapter.amll')).catch(console.error);
+        if (active && ready) void sendEvent('plugin-reload-sync', [...committed.values()].filter(b => !BACKGROUND_ADAPTERS.has(b.id))).catch(console.error);
       }));
       ctx.own(await onEvent<string>('plugin-reload-sync-error', error => { if (active) store.update(s => ({ ...s, error })); }));
     }
@@ -195,7 +198,7 @@ export function manualReloadPlugin(host: PluginHost, store: Store<AppState>, ove
       },
       async restore() {
         for (const bundle of savedBundles) {
-          if (overlay && bundle.id === 'official.adapter.amll') continue;
+          if (overlay && BACKGROUND_ADAPTERS.has(bundle.id)) continue;
           if (bundle.removed) { committed.set(bundle.id, bundle); continue; }
           const loaded = await load(bundle);
           if (overlay && !registry.get(bundle.id) && (!loaded.manifest || !surfacesOf(loaded.manifest).includes('overlay'))) continue;
@@ -215,7 +218,7 @@ export function manualReloadPlugin(host: PluginHost, store: Store<AppState>, ove
       },
       async broadcast() {
         await checkpoint();
-        if (!overlay && ready) await sendEvent('plugin-reload-sync', [...committed.values()].filter(b => b.id !== 'official.adapter.amll'));
+        if (!overlay && ready) await sendEvent('plugin-reload-sync', [...committed.values()].filter(b => !BACKGROUND_ADAPTERS.has(b.id)));
       },
       async reload(id, source, previous) {
         if (overlay) throw Error('请在控制面板触发热重载');

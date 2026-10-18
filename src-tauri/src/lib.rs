@@ -4,6 +4,7 @@ mod broker;
 mod plugin_source;
 mod session;
 mod shortcuts;
+mod smtc;
 mod tray;
 
 use broker::{Broker, BrokerStatus};
@@ -297,6 +298,7 @@ pub fn run() {
         .manage(audio::AudioHub::default())
         .manage(session::Session::default())
         .manage(tray::ControlLifecycle::default())
+        .manage(smtc::SmtcHub::default())
         .setup(|app| {
             tray::install(app)?;
             Ok(())
@@ -332,7 +334,12 @@ pub fn run() {
             plugin_source::plugin_install,
             plugin_source::plugin_uninstall,
             plugin_source::plugin_export_save,
-            plugin_source::plugins_folder_open
+            plugin_source::plugins_folder_open,
+            smtc::smtc_start,
+            smtc::smtc_stop,
+            smtc::smtc_select,
+            smtc::smtc_snapshot,
+            smtc::lyrics_http_get
         ])
         .on_window_event(|window, event| {
             if window.label() == "main" && matches!(event, tauri::WindowEvent::Resized(_)) {

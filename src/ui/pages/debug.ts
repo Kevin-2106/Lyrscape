@@ -11,8 +11,8 @@ import { html, q } from '../kit/dom';
 // errors). Available in release builds. Everything from outside (lyrics, wire
 // payloads, plugin errors) is written with textContent, never as markup.
 
-type TabId = 'playback' | 'amll' | 'lyrics' | 'beat' | 'plugins' | 'events';
-const TABS: [TabId, string][] = [['playback', '播放'], ['amll', 'AMLL 原始数据'], ['lyrics', '歌词解析'], ['beat', '节拍与音频'], ['plugins', '插件'], ['events', '事件']];
+type TabId = 'playback' | 'amll' | 'smtc' | 'lyrics' | 'beat' | 'plugins' | 'events';
+const TABS: [TabId, string][] = [['playback', '播放'], ['amll', 'AMLL 原始数据'], ['smtc', 'SMTC 与在线歌词'], ['lyrics', '歌词解析'], ['beat', '节拍与音频'], ['plugins', '插件'], ['events', '事件']];
 const LINE_LIMIT = 400;
 
 const clock = (epoch: number) => { const d = new Date(epoch); return `${d.toLocaleTimeString('zh-CN', { hour12: false })}.${String(d.getMilliseconds()).padStart(3, '0')}`; };
@@ -75,7 +75,7 @@ function lyricTable(host: HTMLElement, detail: HTMLElement, doc: LyricDocument, 
 }
 
 export const debugPage: PageDefinition = {
-  id: 'debug', group: '应用', title: '调试', subtitle: '播放数据、AMLL 原始消息、歌词解析、节拍与插件状态', icon: icons.chip,
+  id: 'debug', group: '应用', title: '调试', subtitle: '播放数据、AMLL 原始消息、SMTC 与在线歌词、歌词解析、节拍与插件状态', icon: icons.chip,
   mount(root, services) {
     const { ctx } = services;
     const debug = ctx.debug;
@@ -87,7 +87,7 @@ export const debugPage: PageDefinition = {
       </div>
       <div class="debug-body">
         <section role="tabpanel" data-debug-panel="playback" aria-labelledby="debug-tab-playback">
-          <p class="page-intro">共享时间轴看到的播放状态，每 0.2 秒刷新。「采样年龄」是距离播放器最后一次报告进度的时间；正在播放时位置由时间轴按速率外推，AMLL 来源最多外推 5 秒。</p>
+          <p class="page-intro">共享时间轴看到的播放状态，每 0.2 秒刷新。「采样年龄」是距离播放器最后一次报告进度的时间；正在播放时位置由时间轴按速率外推，AMLL 来源最多外推 5 秒，系统媒体按 Windows 报告的采样时刻外推。</p>
           <dl class="facts" data-playback-facts></dl>
           <div class="debug-actions"><button class="button-secondary" data-copy-state>复制状态 JSON</button></div>
         </section>
@@ -102,6 +102,16 @@ export const debugPage: PageDefinition = {
             <button class="button-secondary" data-amll-clear>${icons.trash}清空</button>
           </div>
           <div class="debug-split"><ol class="debug-log" data-amll-list></ol><pre class="debug-pre" data-amll-detail>选择一条消息查看原始数据。</pre></div>
+        </section>
+        <section role="tabpanel" data-debug-panel="smtc" aria-labelledby="debug-tab-smtc" hidden>
+          <p class="page-intro">系统媒体（SMTC）适配器读到的会话状态变化（原生端每 0.5 秒读取一次，变化时上报），以及在线歌词的搜索、候选、命中与失败。只有选择「系统媒体」作为播放来源时才会搜索。最多保留最近 300 条。</p>
+          <div class="debug-toolbar">
+            <span class="helper" data-smtc-count></span>
+            <span class="debug-tabs-spacer"></span>
+            <button class="button-secondary" data-smtc-copy>复制全部</button>
+            <button class="button-secondary" data-smtc-clear>${icons.trash}清空</button>
+          </div>
+          <div class="debug-split"><ol class="debug-log" data-smtc-list></ol><pre class="debug-pre" data-smtc-detail>选择一条记录查看原始数据。</pre></div>
         </section>
         <section role="tabpanel" data-debug-panel="lyrics" aria-labelledby="debug-tab-lyrics" hidden>
           <p class="page-intro">当前歌词文档就是解析器的输出，渲染器读到的就是这些行与时间。点击一行查看逐字数据。也可以在下方粘贴歌词试解析，不会替换当前歌词。</p>
@@ -141,9 +151,9 @@ export const debugPage: PageDefinition = {
     const panel = (id: TabId) => q(page, `[data-debug-panel="${id}"]`);
 
     // ---------- Journal lists (AMLL, events) ----------
-    const selected: Record<DebugChannel, number> = { amll: 0, events: 0 };
-    const listOf = { amll: q(page, '[data-amll-list]'), events: q(page, '[data-event-list]') };
-    const detailOf = { amll: q(page, '[data-amll-detail]'), events: q(page, '[data-event-detail]') };
+    const selected: Record<DebugChannel, number> = { amll: 0, smtc: 0, events: 0 };
+    const listOf = { amll: q(page, '[data-amll-list]'), smtc: q(page, '[data-smtc-list]'), events: q(page, '[data-event-list]') };
+    const detailOf = { amll: q(page, '[data-amll-detail]'), smtc: q(page, '[data-smtc-detail]'), events: q(page, '[data-event-detail]') };
     const showProgress = q<HTMLInputElement>(page, '[data-amll-progress]');
     const filtered = (channel: DebugChannel) => (debug?.journal.list(channel) ?? []).filter(e => channel !== 'amll' || showProgress.checked || e.kind !== 'progress');
     const renderList = (channel: DebugChannel) => {
@@ -151,18 +161,18 @@ export const debugPage: PageDefinition = {
       listOf[channel].replaceChildren(...entries.map(entry => {
         const item = el('li'); item.dataset.entry = String(entry.id);
         if (entry.id === selected[channel]) item.className = 'is-selected';
-        if (['error', 'rejected', 'plugin'].includes(entry.kind)) item.classList.add('is-error');
+        if (['error', 'rejected', 'plugin', 'none'].includes(entry.kind)) item.classList.add('is-error');
         item.append(el('time', clock(entry.at)), el('b', entry.kind), el('span', entry.summary));
         return item;
       }));
       const total = debug?.journal.list(channel).length ?? 0;
-      q(page, channel === 'amll' ? '[data-amll-count]' : '[data-event-count]').textContent = `${entries.length} / ${total} 条`;
+      q(page, `[data-${channel === 'events' ? 'event' : channel}-count]`).textContent = `${entries.length} / ${total} 条`;
     };
     const showEntry = (channel: DebugChannel, entry: DebugEntry | undefined) => {
       selected[channel] = entry?.id ?? 0;
       detailOf[channel].textContent = entry ? `${clock(entry.at)}  ${entry.kind}\n${entry.summary}${entry.truncated ? '\n（已截断）' : ''}\n\n${entry.detail ?? ''}` : '';
     };
-    for (const channel of ['amll', 'events'] as const) listOf[channel].addEventListener('click', event => {
+    for (const channel of ['amll', 'smtc', 'events'] as const) listOf[channel].addEventListener('click', event => {
       const item = (event.target as Element).closest<HTMLElement>('li[data-entry]');
       if (!item) return;
       showEntry(channel, debug?.journal.list(channel).find(e => e.id === Number(item.dataset.entry)));
@@ -170,7 +180,7 @@ export const debugPage: PageDefinition = {
     }, { signal });
     let pendingList = 0;
     const queueList = (channel: DebugChannel) => {
-      if (!visible || tab !== (channel === 'amll' ? 'amll' : 'events') || pendingList) return;
+      if (!visible || tab !== channel || pendingList) return;
       pendingList = window.setTimeout(() => { pendingList = 0; renderList(channel); }, 150);
     };
     const unsubscribe = debug?.journal.subscribe(entry => queueList(entry.channel));
@@ -183,7 +193,7 @@ export const debugPage: PageDefinition = {
       const index = state.lyrics.timingMode === 'none' ? -1 : activeLine(state.lyrics.lines, position);
       const line = state.lyrics.lines[index];
       facts(q(page, '[data-playback-facts]'), [
-        ['播放来源', state.adapterId === 'amll' ? 'AMLL Player' : '本地演示 / 导入'],
+        ['播放来源', state.adapterId === 'amll' ? 'AMLL Player' : state.adapterId === 'smtc' ? `系统媒体 · ${state.media?.source || '无会话'}` : '本地演示 / 导入'],
         ['AMLL 服务', `${state.connection.status} · 端口 ${state.connection.port} · ${state.connection.clients} 个连接${state.connection.error ? ` · ${state.connection.error}` : ''}`],
         ['曲目', `${state.track.title}${state.track.artists.length ? ` — ${state.track.artists.join(' / ')}` : ''}`],
         ['时长', ms(state.track.durationMs)],
@@ -310,6 +320,7 @@ export const debugPage: PageDefinition = {
       for (const [other] of TABS) panel(other).hidden = other !== id;
       if (id === 'amll') renderList('amll');
       if (id === 'events') renderList('events');
+      if (id === 'smtc') renderList('smtc');
       if (id === 'lyrics') { shownDoc = undefined; renderLyrics(ctx.getState()); }
       if (id === 'plugins') renderPlugins();
       startLoops();
@@ -318,11 +329,12 @@ export const debugPage: PageDefinition = {
       const state = ctx.getState();
       return JSON.stringify({
         app: { version: ctx.appVersion, desktop: state.isDesktop, userAgent: navigator.userAgent, at: new Date().toISOString() },
-        playback: { adapter: state.adapterId, connection: state.connection, track: state.track, playback: state.playback, position: ctx.getPosition?.(), error: state.error },
+        playback: { adapter: state.adapterId, connection: state.connection, track: state.track, playback: state.playback, position: ctx.getPosition?.(), media: state.media, error: state.error },
         lyrics: Object.fromEntries(lyricFacts(state.lyrics)),
         plugins: ctx.pluginManagement.list().map(p => ({ id: p.id, version: p.version, origin: p.origin, active: p.active, error: p.error })),
         renderer: state.plugins.rendererId,
         events: debug?.journal.list('events') ?? [],
+        smtc: (debug?.journal.list('smtc') ?? []).slice(-30).map(e => ({ ...e, detail: e.kind === 'found' ? '（含歌词正文，未包含）' : e.detail && e.detail.length > 4000 ? `${e.detail.slice(0, 4000)}…` : e.detail })),
         amll: (debug?.journal.list('amll') ?? []).filter(e => e.kind !== 'progress').slice(-30).map(e => ({ ...e, detail: e.detail && e.detail.length > 4000 ? `${e.detail.slice(0, 4000)}…` : e.detail })),
       }, null, 2);
     };
@@ -334,6 +346,8 @@ export const debugPage: PageDefinition = {
       else if (button.matches('[data-copy-state]')) { const { lyrics, ...rest } = ctx.getState(); void copy(JSON.stringify({ ...rest, lyrics: { ...lyrics, lines: `${lyrics.lines.length} lines` } }, null, 2), services, '状态'); }
       else if (button.matches('[data-amll-copy]')) void copy(JSON.stringify(debug?.journal.list('amll') ?? [], null, 2), services, ' AMLL 消息');
       else if (button.matches('[data-amll-clear]')) { debug?.journal.clear('amll'); showEntry('amll', undefined); renderList('amll'); }
+      else if (button.matches('[data-smtc-copy]')) void copy(JSON.stringify(debug?.journal.list('smtc') ?? [], null, 2), services, ' SMTC 记录');
+      else if (button.matches('[data-smtc-clear]')) { debug?.journal.clear('smtc'); showEntry('smtc', undefined); renderList('smtc'); }
       else if (button.matches('[data-event-clear]')) { debug?.journal.clear('events'); showEntry('events', undefined); renderList('events'); }
       else if (button.matches('[data-lyric-copy]')) void copy(JSON.stringify(ctx.getState().lyrics, null, 2), services, '歌词 JSON');
       else if (button.matches('[data-parse-run]')) runParse();

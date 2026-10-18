@@ -20,11 +20,41 @@ export interface AppState {
   playback: { positionMs: number; playing: boolean; observedAtMonoMs: number; rate: number };
   lyrics: LyricDocument;
   connection: { status: 'stopped' | 'listening' | 'connected' | 'error'; clients: number; error?: string; port: number };
-  adapterId: 'demo' | 'amll';
+  adapterId: AdapterId;
+  /** What the SMTC adapter reads and which online lyrics it found; set while it is the source. */
+  media?: MediaSessionInfo;
   overlay: { visible: boolean; clickthrough: boolean; alwaysOnTop: boolean; borderVisible?: boolean };
   shortcuts?: GlobalShortcutBinding[];
   isDesktop: boolean;
   error?: string;
+}
+export type AdapterId = 'demo' | 'amll' | 'smtc';
+/** A lyric search hit; `key` is `<provider>:<id>`. */
+export interface OnlineLyricCandidate {
+  key: string; provider: 'lrclib' | 'netease';
+  title: string; artists: string[]; album?: string; durationMs?: number;
+  /** Known to have time-synced lyrics (LRCLIB tells up front; NetEase after fetching). */
+  synced?: boolean;
+  /** 0..1 match against the playing track. */
+  score: number;
+}
+export interface MediaSessionInfo {
+  available: boolean;
+  /** AppUserModelId of the session being read, e.g. `Spotify.exe`. */
+  source: string;
+  sessions: string[];
+  /** Session chosen in the UI; undefined follows Windows' current session. */
+  selected?: string;
+  status: string;
+  error?: string;
+  lookup: {
+    state: 'idle' | 'searching' | 'found' | 'none' | 'error';
+    message?: string;
+    /** The candidate whose lyrics are shown. */
+    result?: OnlineLyricCandidate;
+    candidates: OnlineLyricCandidate[];
+    cached?: boolean;
+  };
 }
 export interface Timeline { position(state: AppState, nowMonoMs?: number): number }
 export interface Renderer { mount(root: HTMLElement, state: () => AppState, timeline: Timeline): () => void }

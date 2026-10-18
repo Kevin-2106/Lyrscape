@@ -7,7 +7,7 @@ import { builtinManifests, TEXT_RENDERER } from './manifests';
 import { legacyPvIds } from './pv-presets';
 import { ADDABLE_CATEGORIES, infoOf, metadataKey, PluginRegistry, validateManifest, type RegistryEntry } from './registry';
 
-export { AMLL_ADAPTER, AURORA_RENDERER, BEAT_DETECTOR, TEXT_RENDERER, amllFields, auroraFields, beatFields } from './manifests';
+export { AMLL_ADAPTER, AURORA_RENDERER, BEAT_DETECTOR, SMTC_ADAPTER, TEXT_RENDERER, amllFields, auroraFields, beatFields, smtcFields } from './manifests';
 export interface RegisteredPlugin { info: PluginInfo; plugin: Plugin }
 /** A freshly loaded definition, with the manifest its module exported (if any). */
 export interface LoadedPlugin { plugin: Plugin; manifest?: PluginManifest }

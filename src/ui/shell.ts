@@ -96,8 +96,14 @@ export function mountApp(root: HTMLElement, ctx: UiContext): () => void {
     const status = String(state.connection.status);
     const amllOn = state.plugins.enabled['official.adapter.amll'] !== false;
     const amll = state.adapterId === 'amll';
-    q(chip, '[data-chip-dot]').className = `status-dot ${amll && status === 'connected' ? 'is-connected' : amll && status === 'error' ? 'is-error' : amll ? 'is-waiting' : ''}`;
-    q(chip, '[data-chip-text]').textContent = !amllOn ? 'AMLL 已停用' : amll ? (connectionLabels[status] ?? 'AMLL 未启动') : '本地演示';
+    if (state.adapterId === 'smtc') {
+      const media = state.media;
+      q(chip, '[data-chip-dot]').className = `status-dot ${media?.error ? 'is-error' : media?.available ? 'is-connected' : 'is-waiting'}`;
+      q(chip, '[data-chip-text]').textContent = media?.available ? `SMTC · ${media.source}` : 'SMTC 等待媒体';
+    } else {
+      q(chip, '[data-chip-dot]').className = `status-dot ${amll && status === 'connected' ? 'is-connected' : amll && status === 'error' ? 'is-error' : amll ? 'is-waiting' : ''}`;
+      q(chip, '[data-chip-text]').textContent = amll ? (!amllOn ? 'AMLL 已停用' : connectionLabels[status] ?? 'AMLL 未启动') : '本地演示';
+    }
     chip.dataset.chip = 'connection';
     quick.setAttribute('aria-pressed', String(state.overlay.visible));
     quick.classList.toggle('is-on', state.overlay.visible);

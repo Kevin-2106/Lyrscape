@@ -36,7 +36,7 @@ Get-CimInstance Win32_Process -Filter "name = 'lyrscape.exe'" |
 - 已实现：可信插件 scope / 激活回滚 / 依赖停用保护、管理 UI、内置可选启停与配置、普通文字 / Aurora / 三个文字 PV renderer、基础 parser / timeline、透明窗口、AMLL V1 / V2 只读接入。
 - 已实现（10-14）：运行期插件注册表（`src/plugins/registry.ts`）、内置目录（`manifests.ts` 纯数据 + `catalog.ts` 工厂）、manifest 校验与「重新扫描插件列表」（开发源码 / exe 旁 plugins 目录，双窗口两阶段同步），见 [手动插件热重载](manual-plugin-reload.md)。
 - 不完整：来源切换和 adapter 选择仍是显式组合；第三方包安装、权限声明、版本协商、Worker / iframe 隔离、通用 effect 插槽未实现。
-- 尚未实现：SMTC、外部播放器播放 / seek 控制。
+- 已实现 SMTC adapter 与在线歌词（[说明](smtc-adapter.md)）；尚未实现：外部播放器播放 / seek 控制。
 - 仍需实机验证：多显示器 / 多 DPI、独占全屏、休眠恢复、长期资源稳定性、其他真实客户端。
 
 ## 本轮需求与验证入口
